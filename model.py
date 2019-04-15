@@ -10,8 +10,7 @@ class Model:
 		self.make_constants()
 		self.make_variables()
 
-		self.size_ref = cp.ones([par['batch_size'],par['n_hidden']], \
-			dtype=cp.float32)
+		self.size_ref = cp.ones([par['batch_size'],par['n_hidden']])
 
 
 	def make_variables(self):
@@ -29,7 +28,8 @@ class Model:
 	def make_constants(self):
 
 		constants = [
-			'n_hidden', 'noise_rnn', 'adex', 'w_init', 'beta_neuron']
+			'n_hidden', 'noise_rnn', 'adex', 'w_init', 'beta_neuron', \
+			'EI_mask']
 
 		self.con_dict = {}
 		for c in constants:
@@ -45,8 +45,7 @@ class Model:
 		self.output_mask = trial_info['train_mask']
 
 		# Establish outputs
-		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']], \
-			dtype=cp.float32)
+		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
 
 		# Initialize cell states
 		if par['cell_type'] == 'lif':

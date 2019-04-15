@@ -11,7 +11,7 @@ par = {
 	'save_fn'               : 'adex_testing',
 
 	# Training environment
-	'batch_size'            : 256,
+	'batch_size'            : 1024,
 	'iterations'            : 1000,
 	'cell_type'             : 'adex',   # 'lif', 'adex'
 
@@ -25,7 +25,7 @@ par = {
 	'n_output'              : 3,
 
 	# EI setup
-	'EI_prop'               : 1.,
+	'EI_prop'               : 0.8,
 	'balance_EI'            : True,
 
 	# AdEx parameters
@@ -51,7 +51,7 @@ par = {
 	'output_constant'       : 20,
 
 	# Task setup
-	'task'                  : 'oic',
+	'task'                  : 'dms',
 	'kappa'                 : 2.0,
 	'tuning_height'         : 100.0,
 	'response_multiplier'   : 1.,
@@ -88,31 +88,31 @@ def update_dependencies():
 	par['n_EI'] = int(par['n_hidden']*par['EI_prop'])
 
 	# Network initializations
-	par['h_init_init']  = np.zeros([1,par['n_hidden']]).astype(np.float32)
+	par['h_init_init']  = np.zeros([1,par['n_hidden']])
 
-	par['W_in_init']	= np.random.gamma(par['input_gamma'],  scale=1.0, size=[par['n_input'],  par['n_hidden']]).astype(np.float32)
-	par['W_out_init']	= np.random.gamma(par['output_gamma'], scale=1.0, size=[par['n_hidden'], par['n_output']]).astype(np.float32)
-	par['W_rnn_init']	= np.random.gamma(par['rnn_gamma'],    scale=1.0, size=[par['n_hidden'], par['n_hidden']]).astype(np.float32)
+	par['W_in_init']	= np.random.gamma(par['input_gamma'],  scale=1.0, size=[par['n_input'],  par['n_hidden']])
+	par['W_out_init']	= np.random.gamma(par['output_gamma'], scale=1.0, size=[par['n_hidden'], par['n_output']])
+	par['W_rnn_init']	= np.random.gamma(par['rnn_gamma'],    scale=1.0, size=[par['n_hidden'], par['n_hidden']])
 
 	if par['balance_EI']:
-		par['W_rnn_init'][par['n_EI']:,:par['n_EI']] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=par['W_rnn_init'][par['n_EI']:,:par['n_EI']].shape).astype(np.float32)
-		par['W_rnn_init'][:par['n_EI'],par['n_EI']:] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=par['W_rnn_init'][:par['n_EI'],par['n_EI']:].shape).astype(np.float32)
+		par['W_rnn_init'][par['n_EI']:,:par['n_EI']] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=par['W_rnn_init'][par['n_EI']:,:par['n_EI']].shape)
+		par['W_rnn_init'][:par['n_EI'],par['n_EI']:] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=par['W_rnn_init'][:par['n_EI'],par['n_EI']:].shape)
 
-	par['b_rnn_init']   = np.zeros([1, par['n_hidden']]).astype(np.float32)
-	par['b_out_init']   = np.zeros([1, par['n_output']]).astype(np.float32)
+	par['b_rnn_init']   = np.zeros([1, par['n_hidden']])
+	par['b_out_init']   = np.zeros([1, par['n_output']])
 
 	par['W_rnn_mask']   = 1 - np.eye(par['n_hidden'])
 	par['W_rnn_init']  *= par['W_rnn_mask']
 
-	par['EI_vector']    = np.ones(par['n_hidden']).astype(np.float32)
+	par['EI_vector']    = np.ones(par['n_hidden'])
 	par['EI_vector'][par['n_EI']:] *= -1
 	par['EI_mask']      = np.diag(par['EI_vector'])
 
 	par['dt_sec']       = par['dt']/1000
-	par['alpha_neuron'] = np.float32(par['dt']/par['membrane_constant'])
-	par['beta_neuron']  = np.float32(par['dt']/par['output_constant'])
-	par['noise_rnn']    = np.float32(np.sqrt(2*par['alpha_neuron'])*par['noise_rnn_sd'])
-	par['noise_in']     = np.float32(np.sqrt(2/par['alpha_neuron'])*par['noise_rnn_sd'])
+	par['alpha_neuron'] = par['dt']/par['membrane_constant']
+	par['beta_neuron']  = par['dt']/par['output_constant']
+	par['noise_rnn']    = np.sqrt(2*par['alpha_neuron'])*par['noise_rnn_sd']
+	par['noise_in']     = np.sqrt(2/par['alpha_neuron'])*par['noise_rnn_sd']
 
 	### Adaptive-Expoential spiking
 	if par['cell_type'] == 'adex':
@@ -134,7 +134,7 @@ def update_dependencies():
 		par['adex'] = {}
 		for (k0, v_exc), (k1, v_inh) in zip(par[par['exc_model']].items(), par[par['inh_model']].items()):
 			assert(k0 == k1)
-			par_matrix = np.ones([1,par['n_hidden']], dtype=np.float32)
+			par_matrix = np.ones([1,par['n_hidden']])
 			par_matrix[:,:int(par['n_hidden']*par['EI_prop'])] *= v_exc
 			par_matrix[:,int(par['n_hidden']*par['EI_prop']):] *= v_inh
 			par['adex'][k0] = par_matrix
