@@ -6,7 +6,7 @@ if len(sys.argv) > 1:
     import cupy as cp
     cp.cuda.Device(sys.argv[1]).use()
 else:
-    import numpy as cp
+    cp = np
 
 
 ### GPU utilities
@@ -62,48 +62,7 @@ def synaptic_plasticity(h, syn_x, syn_u, constants, use_stp, hidden_size):
         h_post = h*cp.ones([1,1,hidden_size], dtype=cp.float32)
 
     return h_post, syn_x, syn_u
-
-
-### Adaptive-Exponential spiking model
-
-def run_adex(V, w, I, constants):
-    """ Run one step of the AdEx algorithm """
-
-    V = V.astype(cp.float32)
-    w = w.astype(cp.float32)
-    I = I.astype(cp.float32)/constants['current_divider']
-
-    V_next      = adex_membrane(V, w, I, constants)
-    w_next      = adex_adaptation(V, w, constants)
-    V, w, spike = adex_spike(V_next, w_next, constants)
-
-    return V.astype(cp.float32), w.astype(cp.float32), spike.astype(cp.float32)
-
-def adex_membrane(V, w, I, c):
-    """ Calculate the new membrane potential """
-
-    term1 = I + c['g']*c['D']*cp.exp((V-c['V_T'])/c['D'])
-    term2 = w + c['g']*(V-c['E'])
-    return V + (c['dt']/c['C'])*(term1-term2)
-
-def adex_adaptation(V, w, c):
-    """ Calculate the new adaptation current """
-
-    term1 = c['a']*(V-c['E'])
-    term2 = w
-    return w + (c['dt']/c['tau'])*(term1-term2)
-
-def adex_spike(V, w, c):
-    """ Check potential thresholds for new spikes """
-
-    # Spike projects 0mV or 1 mV (nothing or unit value) to the network
-    # with the current parameters
-    spike = V > c['Vth']
-    V = cp.where(spike, c['V_r'], V)
-    w = cp.where(spike, w + c['b'], w)
-
-    return V, w, spike
-
+    
 
 ### Judgement functions
 
@@ -112,29 +71,8 @@ def cross_entropy(mask, target, output, eps=1e-16):
     mask   = mask.astype(cp.float32)
     target = target.astype(cp.float32)
     output = output.astype(cp.float32)
-    return -cp.mean(mask[...,cp.newaxis]*target*cp.log(softmax(output)+eps), axis=(0,2,3)).astype(cp.float32)
 
-
-### Optimization functions
-
-def cross(var1, var2, rate):
-    """ Transmit some of var2 over to var1, based on the give rate """
-    return cp.where(cp.random.choice([True,False], size=var1.shape, p=[rate, 1-rate]), var1, var2)
-
-def mutate(var, num, rate, scale, epsilon=0.):
-    """ Mutates a given variable by a given rate and scale,
-        generating as many offspring as num """
-    #mutation_mask = cp.random.random(size=[num, *var.shape], dtype=np.float32).astype(cp.float32)
-    mutation_mask = cp.random.random(size=[num, *var.shape]).astype(cp.float32)
-    mutation = cp.random.normal(loc=epsilon, scale=scale, size=[num, *var.shape])
-    return var[cp.newaxis,...] + mutation*mutation_mask
-
-def mutate_integers(var, num, rate, scale, epsilon):
-    """ Mutates a given integer variable by a given rate and scale,
-        generating as many offspring as num """
-    mutation_mask = cp.random.random(size=[num, *var.shape], dtype=np.float32).astype(cp.int8)
-    mutation = np.clip(cp.random.normal(loc=0, scale=par['mutation_strength'], size=[num, *var.shape]), -127, 127).astype(np.int8)
-    return var[cp.newaxis,...] + mutation*mutation_mask
+    return -cp.mean(mask[:,:,cp.newaxis]*target*cp.log(softmax(output)+eps)).astype(cp.float32)
 
 
 ### Reporting functions
@@ -149,6 +87,6 @@ def accuracy(output, target, mask, inc_fix=False):
     arg_target = cp.argmax(target, -1)
     mask = mask if inc_fix else mask * (arg_target != 0)
 
-    acc = cp.sum(mask * (arg_output == arg_target), axis=(0,2))/cp.sum(mask, axis=(0,2))
+    acc = cp.sum(mask * (arg_output == arg_target))/cp.sum(mask)
 
     return acc.astype(cp.float32)
