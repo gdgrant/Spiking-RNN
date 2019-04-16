@@ -22,7 +22,7 @@ def to_cpu(x):
 	""" Move cupy arrays (or dicts of arrays) to CPU """
 	if len(sys.argv) > 1:
 		if type(x) == dict:
-			return {k:to_gpu(a) for (k, a) in x.items()}
+			return {k:to_cpu(a) for (k, a) in x.items()}
 		else:
 			return cp.asnumpy(x)
 	else:
