@@ -1,6 +1,7 @@
 from utils import *
 from parameters import par, update_dependencies
 from adex import run_adex
+from adaptive_lif import run_lif
 from stimulus import Stimulus
 
 class Model:
@@ -15,10 +16,7 @@ class Model:
 
 	def make_variables(self):
 
-		if par['cell_type'] == 'lif':
-			raise Exception('Implement')
-		elif par['cell_type'] == 'adex':
-			var_names = ['W_in', 'W_out', 'W_rnn', 'b_out']
+		var_names = ['W_in', 'W_out', 'W_rnn', 'b_out']
 
 		self.var_dict = {}
 		for v in var_names:
@@ -28,8 +26,8 @@ class Model:
 	def make_constants(self):
 
 		constants = [
-			'n_hidden', 'noise_rnn', 'adex', 'w_init', 'beta_neuron', \
-			'EI_mask']
+			'n_hidden', 'noise_rnn', 'adex', 'lif', \
+			'w_init', 'beta_neuron', 'EI_mask']
 
 		self.con_dict = {}
 		for c in constants:
@@ -75,9 +73,12 @@ class Model:
 				+ spike @ self.var_dict['W_out'] + self.var_dict['b_out']
 
 
-	def LIF_recurrent_cell(self, spike, state, adapt, rnn_input):
+	def LIF_recurrent_cell(self, z, v, a, rnn_input):
 
-		raise Exception('Implement')
+		I = rnn_input @ self.var_dict['W_in'] + z @ self.W_rnn_effective
+		v, a, spike = run_lif(v, a, I, self.con_dict['lif'])
+
+		return spike, v, a
 
 
 	def AdEx_recurrent_cell(self, spike, V, w, rnn_input):
