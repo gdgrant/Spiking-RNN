@@ -115,33 +115,41 @@ def update_dependencies():
 	par['noise_in']     = np.sqrt(2/par['alpha_neuron'])*par['noise_rnn_sd']
 
 	### Adaptive-Expoential spiking
-	if par['cell_type'] == 'adex':
+	# Note that voltages are in units of mV and currents
+	# are in units of mA.  When pulling from a table based in volts/amps,
+	# multiply E, V_T, D, b, V_r, and Vth by 1000
+	par['cNA'] = {
+		'C'   : 59e-12,     'g'   : 2.9e-9,     'E'   : -62,
+		'V_T' : -42,        'D'   : 3,          'a'   : 1.8e-9,
+		'tau' : 16e-3,      'b'   : 61e-9,      'V_r' : -54,
+		'Vth' : 20,         'dt'  : par['dt_sec'] }
+	par['RS']  = {
+		'C'   : 104e-12,    'g'   : 4.3e-9,     'E'   : -65,
+		'V_T' : -52,        'D'   : 0.8,        'a'   : -0.8e-9,
+		'tau' : 88e-3,      'b'   : 65e-9,      'V_r' : -53,
+		'Vth' : 20,         'dt'  : par['dt_sec'] }
 
-		# Note that voltages are in units of mV and currents
-		# are in units of mA.  When pulling from a table based in volts/amps,
-		# multiply E, V_T, D, b, V_r, and Vth by 1000
-		par['cNA'] = {
-			'C'   : 59e-12,     'g'   : 2.9e-9,     'E'   : -62,
-			'V_T' : -42,        'D'   : 3,          'a'   : 1.8e-9,
-			'tau' : 16e-3,      'b'   : 61e-9,      'V_r' : -54,
-			'Vth' : 20,         'dt'  : par['dt']/1000 }
-		par['RS']  = {
-			'C'   : 104e-12,    'g'   : 4.3e-9,     'E'   : -65,
-			'V_T' : -52,        'D'   : 0.8,        'a'   : -0.8e-9,
-			'tau' : 88e-3,      'b'   : 65e-9,      'V_r' : -53,
-			'Vth' : 20,         'dt'  : par['dt']/1000 }
+	par['adex'] = {}
+	for (k0, v_exc), (k1, v_inh) in zip(par[par['exc_model']].items(), par[par['inh_model']].items()):
+		assert(k0 == k1)
+		par_matrix = np.ones([1,par['n_hidden']])
+		par_matrix[:,:int(par['n_hidden']*par['EI_prop'])] *= v_exc
+		par_matrix[:,int(par['n_hidden']*par['EI_prop']):] *= v_inh
+		par['adex'][k0] = par_matrix
 
-		par['adex'] = {}
-		for (k0, v_exc), (k1, v_inh) in zip(par[par['exc_model']].items(), par[par['inh_model']].items()):
-			assert(k0 == k1)
-			par_matrix = np.ones([1,par['n_hidden']])
-			par_matrix[:,:int(par['n_hidden']*par['EI_prop'])] *= v_exc
-			par_matrix[:,int(par['n_hidden']*par['EI_prop']):] *= v_inh
-			par['adex'][k0] = par_matrix
+	par['w_init'] = par['adex']['b']
+	par['adex']['current_divider'] = par['current_divider']
 
-		par['w_init'] = par['adex']['b']
-		par['adex']['current_divider'] = par['current_divider']
-
+	### LIF with Adaptive Threshold spiking
+	par['lif'] = {
+		'tau_m'		: 20e-3,
+		'tau_a'		: 200e-3,
+		'v_th'		: 0.61,
+		'beta'		: 1.8
+	}
+	par['lif']['alpha'] = np.exp(-par['dt_sec']/par['lif']['tau_m'])
+	par['lif']['rho']   = np.exp(-par['dt_sec']/par['lif']['tau_a'])
+		
 
 update_dependencies()
 print('--> Parameters loaded.\n')
