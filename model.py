@@ -42,16 +42,17 @@ class Model:
 		self.output_data = trial_info['desired_output']
 		self.output_mask = trial_info['train_mask']
 
-		# Establish outputs
+		# Establish spike and output recording
+		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
 
 		# Initialize cell states
 		if par['cell_type'] == 'lif':
-			spike = 0. * self.size_ref
+			self.z[-1,...] = 0. * self.size_ref
 			state = 0. * self.size_ref
-			adapt = 0. * self.size_ref
+			adapt = 1. * self.size_ref
 		elif par['cell_type'] == 'adex':
-			spike = 0. * self.size_ref
+			self.z[-1,...] = 0. * self.size_ref
 			state = self.con_dict['adex']['V_r'] * self.size_ref
 			adapt = self.con_dict['w_init'] * self.size_ref
 
@@ -70,8 +71,8 @@ class Model:
 		# Loop across time
 		for t in range(par['num_time_steps']):
 
-			spike, state, adapt, self.y[t,...] = \
-				cell(self.input_data[t], spike, state, adapt, self.y[t-1,...])
+			self.z[t,...], state, adapt, self.y[t,...] = \
+				cell(self.input_data[t], self.z[t-1,...], state, adapt, self.y[t-1,...])
 
 
 	def LIF_recurrent_cell(self, rnn_input, z, v, a, y):
@@ -109,7 +110,15 @@ class Model:
 
 	def get_losses(self):
 
-		return {'task':to_cpu(self.task_loss)}
+		return to_cpu({'task':self.task_loss})
+
+
+	def get_mean_spiking(self):
+
+		z_mean = cp.mean(self.z, axis=(1,2))
+		spiking = cp.sum(z_mean*1000/par['trial_length'])
+
+		return to_cpu(spiking)
 
 
 	def get_performance(self):
@@ -138,9 +147,23 @@ def main():
 		# Process a batch of stimulus using the current models
 		model.run_model(stim.make_batch())
 		model.optimize()
+
+		losses = model.get_losses()
+		mean_spiking = model.get_mean_spiking()
 		task_accuracy, full_accuracy = model.get_performance()
 
-		print(i, task_accuracy)
+		info_str0 = 'Iter {:>5} | Task Loss: {:5.3f} | Task Acc: {:5.3f} | '.format(\
+			i, losses['task'], task_accuracy, full_accuracy)
+		info_str1 = 'Full Acc: {:5.3f} | Mean Spiking: {:6.3f} Hz'.format(\
+			full_accuracy, mean_spiking)
+		print(info_str0 + info_str1)
+
+		# import matplotlib.pyplot as plt
+		# fig, ax = plt.subplots(2,1)
+		# ax[0].imshow(to_cpu(model.input_data[:,0,:].T), aspect='auto')
+		# ax[1].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
+		# plt.show()
+		# quit()
 
 
 if __name__ == '__main__':
