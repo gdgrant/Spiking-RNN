@@ -47,7 +47,9 @@ class Model:
 
 		# Initialize cell states
 		if par['cell_type'] == 'lif':
-			raise Exception('Implement')
+			spike = 0. * self.size_ref
+			state = 0. * self.size_ref
+			adapt = 0. * self.size_ref
 		elif par['cell_type'] == 'adex':
 			spike = 0. * self.size_ref
 			state = self.con_dict['adex']['V_r'] * self.size_ref

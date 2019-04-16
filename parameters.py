@@ -8,12 +8,12 @@ par = {
 
 	# Context
 	'save_dir'              : './savedir/',
-	'save_fn'               : 'adex_testing',
+	'save_fn'               : 'lif_testing',
 
 	# Training environment
 	'batch_size'            : 1024,
 	'iterations'            : 1000,
-	'cell_type'             : 'adex',   # 'lif', 'adex'
+	'cell_type'             : 'lif',   # 'lif', 'adex'
 
 	# Network shape
 	'num_motion_tuned'      : 24,
