@@ -70,25 +70,30 @@ class Model:
 		# Loop across time
 		for t in range(par['num_time_steps']):
 
-			spike, state, adapt = cell(spike, state, adapt, self.input_data[t])
-			self.y[t,...] = self.con_dict['beta_neuron'] * self.y[t-1,...] \
-				+ spike @ self.var_dict['W_out'] + self.var_dict['b_out']
+			spike, state, adapt, self.y[t,...] = \
+				cell(self.input_data[t], spike, state, adapt, self.y[t-1,...])
 
 
-	def LIF_recurrent_cell(self, z, v, a, rnn_input):
+	def LIF_recurrent_cell(self, rnn_input, z, v, a, y):
 
 		I = rnn_input @ self.var_dict['W_in'] + z @ self.W_rnn_effective
-		v, a, spike = run_lif(v, a, I, self.con_dict['lif'])
+		v, a, z = run_lif(v, a, I, self.con_dict['lif'])
 
-		return spike, v, a
+		y = self.con_dict['lif']['kappa'] * y \
+			+ z @ self.var_dict['W_out'] + self.var_dict['b_out']
+
+		return z, v, a, y
 
 
-	def AdEx_recurrent_cell(self, spike, V, w, rnn_input):
+	def AdEx_recurrent_cell(self, rnn_input, spike, V, w, y):
 
 		I = rnn_input @ self.var_dict['W_in'] + spike @ self.W_rnn_effective
 		V, w, spike = run_adex(V, w, I, self.con_dict['adex'])
 
-		return spike, V, w
+		y = self.con_dict['beta_neuron'] * y \
+			+ spike @ self.var_dict['W_out'] + self.var_dict['b_out']
+		
+		return spike, V, w, y
 
 
 	def optimize(self):

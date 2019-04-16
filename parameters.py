@@ -144,11 +144,13 @@ def update_dependencies():
 	par['lif'] = {
 		'tau_m'		: 20e-3,
 		'tau_a'		: 200e-3,
+		'tau_o'		: 20e-3,
 		'v_th'		: 0.61,
 		'beta'		: 1.8
 	}
 	par['lif']['alpha'] = np.exp(-par['dt_sec']/par['lif']['tau_m'])
 	par['lif']['rho']   = np.exp(-par['dt_sec']/par['lif']['tau_a'])
+	par['lif']['kappa']	= np.exp(-par['dt_sec']/par['lif']['tau_o'])
 		
 
 update_dependencies()
