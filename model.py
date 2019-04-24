@@ -27,7 +27,8 @@ class Model:
 
 		constants = [
 			'n_hidden', 'noise_rnn', 'adex', 'lif', \
-			'w_init', 'beta_neuron', 'EI_mask']
+			'w_init', 'beta_neuron', 'EI_mask', \
+			'w_in_const']
 
 		self.con_dict = {}
 		for c in constants:
@@ -77,7 +78,7 @@ class Model:
 
 	def LIF_recurrent_cell(self, rnn_input, z, v, a, y):
 
-		I = rnn_input @ self.var_dict['W_in'] + z @ self.W_rnn_effective
+		I = rnn_input @ self.con_dict['W_in_const'] + z @ self.W_rnn_effective
 		v, a, z = run_lif(v, a, I, self.con_dict['lif'])
 
 		y = self.con_dict['lif']['kappa'] * y \
