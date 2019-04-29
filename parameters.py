@@ -24,6 +24,8 @@ par = {
 	'n_hidden'              : 100,
 	'n_output'              : 3,
 
+	# Pseudo derivative
+	'eta'					: 1.0,
 	# EI setup
 	'EI_prop'               : 0.8,
 	'balance_EI'            : True,
@@ -116,13 +118,14 @@ def update_dependencies():
 
 	### LIF spiking (max 40-50 Hz; 10-20 Hz for preferred dir)
 	par['w_in_const']   = np.zeros((par['n_input'], par['n_hidden']))
-	U = np.arange(0, 365, 5)
-	beta = 1
-	kappa = 1
-	z = beta/np.exp(kappa)
-	for i in range(72):
-		y = z * exp(kappa*np.cos(U - i*5))
-		par['w_in_const'] = y
+
+	# U = np.arange(0, 365, 5)
+	# beta = 1
+	# kappa = 1
+	# z = beta/np.exp(kappa)
+	# for i in range(72):
+	# 	y = z * np.exp(kappa*np.cos(U - i*5))
+	# 	par['w_in_const'] = y
 
 	### Adaptive-Expoential spiking
 	# Note that voltages are in units of mV and currents

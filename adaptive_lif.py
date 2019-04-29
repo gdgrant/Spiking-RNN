@@ -6,11 +6,11 @@ from utils import *
 def run_lif(v, a, I, constants):
 	""" Run one step of the Adaptive LIF algorithm """
 
-	z = lif_spike(v, a, constants)
+	z, A, v_th = lif_spike(v, a, constants)
 	v = lif_membrane(v, I, z, constants)
 	a = lif_adaptation(a, z, constants)
 
-	return v, a, z
+	return v, a, z, A, v_th
 
 def lif_membrane(v, I, z, c):
 	""" Calculate the new membrane potential """
@@ -26,7 +26,9 @@ def lif_spike(v, a, c):
 	""" Check potential thresholds for new spikes """
 
 	A = c['v_th'] + c['beta']*a
-	return heaviside((v-A)/c['v_th'])
+	v_th = c['v_th']
+
+	return heaviside((v-A)/c['v_th']), A, v_th
 
 def heaviside(x):
 	""" Perform the Heaviside step function """

@@ -46,7 +46,11 @@ class Model:
 		# Establish spike and output recording
 		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
+		self.z_hat = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
+		self.epsilon_v = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], par['n_hidden']])
+		self.epsilon_a = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], par['n_hidden']])
 
+		par['cell_type'] = 'lif'
 		# Initialize cell states
 		if par['cell_type'] == 'lif':
 			self.z[-1,...] = 0. * self.size_ref
@@ -72,19 +76,29 @@ class Model:
 		# Loop across time
 		for t in range(par['num_time_steps']):
 
-			self.z[t,...], state, adapt, self.y[t,...] = \
-				cell(self.input_data[t], self.z[t-1,...], state, adapt, self.y[t-1,...])
+			self.z[t,...], state, adapt, self.y[t,...], self.z_hat[t,...], self.epsilon_v[t,...], self.epsilon_a[t,...] = \
+				cell(self.input_data[t], self.z[t-1,...], state, adapt, self.y[t-1,...], self.z_hat[t-1,...], self.epsilon_v[t-1,...], self.epsilon_a[t-1,...])
 
 
-	def LIF_recurrent_cell(self, rnn_input, z, v, a, y):
+	def LIF_recurrent_cell(self, rnn_input, z, v, a, y, z_hat, epsilon_v, epsilon_a):
 
-		I = rnn_input @ self.con_dict['W_in_const'] + z @ self.W_rnn_effective
-		v, a, z = run_lif(v, a, I, self.con_dict['lif'])
+		I = rnn_input @ self.con_dict['w_in_const'] + z @ self.W_rnn_effective
+		v, a, z, A, v_th = run_lif(v, a, I, self.con_dict['lif'])
 
 		y = self.con_dict['lif']['kappa'] * y \
 			+ z @ self.var_dict['W_out'] + self.var_dict['b_out']
 
-		return z, v, a, y
+		h = par['eta'] * np.maximum(np.zeros(self.size_ref.shape), 1 - np.abs((v - A) / v_th))
+
+		h_broadcast = np.repeat(h, par['n_hidden'], axis=1).reshape((par['batch_size'], par['n_hidden'], par['n_hidden']))
+
+		epsilon_a = h_broadcast * epsilon_v + (par['lif']['rho'] - (h_broadcast * par['lif']['beta'])) * epsilon_a
+
+		epsilon_v = np.repeat(z_hat, par['n_hidden'], axis=1).reshape((par['batch_size'], par['n_hidden'], par['n_hidden']))
+
+		z_hat = par['lif']['alpha'] * z_hat + z
+
+		return z, v, a, y, z_hat, epsilon_a, epsilon_v
 
 
 	def AdEx_recurrent_cell(self, rnn_input, spike, V, w, y):
@@ -102,6 +116,12 @@ class Model:
 
 		# Calculate task loss
 		self.task_loss = cross_entropy(self.output_mask, self.output_data, self.y)
+
+		self.var_dict['W_rnn']
+
+		#self.var_dict['W_out']
+
+		#self.var_dict['b_out']
 
 
 	def get_weights(self):
