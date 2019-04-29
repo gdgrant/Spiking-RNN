@@ -117,15 +117,27 @@ def update_dependencies():
 	par['noise_in']     = np.sqrt(2/par['alpha_neuron'])*par['noise_rnn_sd']
 
 	### LIF spiking (max 40-50 Hz; 10-20 Hz for preferred dir)
-	par['w_in_const']   = np.zeros((par['n_input'], par['n_hidden']))
 
-	# U = np.arange(0, 365, 5)
-	# beta = 1
-	# kappa = 1
-	# z = beta/np.exp(kappa)
-	# for i in range(72):
-	# 	y = z * np.exp(kappa*np.cos(U - i*5))
-	# 	par['w_in_const'] = y
+	par['W_in_const']   = np.zeros((par['n_input'], par['n_hidden']))
+	U = np.arange(0, 360, 13) #73
+	print(U)
+	# beta = 0.04
+	# kappa = 2
+	# beta = 0.04
+	# kappa = 0.75
+	beta = 1.5
+	kappa = 15
+	z = beta/np.exp(kappa)
+	for i in range(73):
+		y = z * np.exp(kappa*np.cos(np.radians(U - i*5)))
+		par['W_in_const'][:,i] = y
+
+	# import matplotlib.pyplot as plt
+	# fig, ax = plt.subplots(2,1)
+	# ax[0].imshow(par['W_in_const'],aspect='auto')
+	# ax[1].imshow(par['W_in_init'],aspect='auto')
+	# plt.show()
+
 
 	### Adaptive-Expoential spiking
 	# Note that voltages are in units of mV and currents

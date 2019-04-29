@@ -28,7 +28,7 @@ class Model:
 		constants = [
 			'n_hidden', 'noise_rnn', 'adex', 'lif', \
 			'w_init', 'beta_neuron', 'EI_mask', \
-			'w_in_const']
+			'W_in_const']
 
 		self.con_dict = {}
 		for c in constants:
@@ -153,7 +153,7 @@ class Model:
 def main():
 
 	# Start the model run by loading the network controller and stimulus
-	print('\nStarting model run: {}'.format(par['save_fn']))
+	print('\nStarting model run: {}'.format(par['cell_type']))
 	model = Model()
 	stim  = Stimulus()
 
@@ -180,9 +180,11 @@ def main():
 		print(info_str0 + info_str1)
 
 		# import matplotlib.pyplot as plt
-		# fig, ax = plt.subplots(2,1)
+		# fig, ax = plt.subplots(4,1)
 		# ax[0].imshow(to_cpu(model.input_data[:,0,:].T), aspect='auto')
 		# ax[1].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
+		# ax[2].plot(to_cpu(np.mean(model.z[:,0,:], axis=(1))))
+		# ax[3].plot(to_cpu(np.mean(model.z, axis=(1,2))))
 		# plt.show()
 		# quit()
 

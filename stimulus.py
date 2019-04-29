@@ -47,7 +47,7 @@ class Stimulus:
 			ax[1,1].imshow(trial_info['desired_output'][:,0,:], aspect='auto', clim=[0,1])
 			ax[1,2].imshow(trial_info['train_mask'][:,0,np.newaxis], aspect='auto', clim=[0,1])
 			plt.show()
-			quit()
+			# quit()
 
 		return trial_info
 
