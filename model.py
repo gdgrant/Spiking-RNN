@@ -47,7 +47,7 @@ class Model:
 		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
 		self.z_hat = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
-		self.epsilon_v = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], par['n_hidden']])
+		#self.epsilon_v = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], par['n_hidden']])
 		self.epsilon_a = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], par['n_hidden']])
 
 		par['cell_type'] = 'lif'
@@ -76,11 +76,11 @@ class Model:
 		# Loop across time
 		for t in range(par['num_time_steps']):
 
-			self.z[t,...], state, adapt, self.y[t,...], self.z_hat[t,...], self.epsilon_v[t,...], self.epsilon_a[t,...] = \
-				cell(self.input_data[t], self.z[t-1,...], state, adapt, self.y[t-1,...], self.z_hat[t-1,...], self.epsilon_v[t-1,...], self.epsilon_a[t-1,...])
+			self.z[t,...], state, adapt, self.y[t,...], self.z_hat[t,...], self.epsilon_a[t,...] = \
+				cell(self.input_data[t], self.z[t-1,...], state, adapt, self.y[t-1,...], self.z_hat[t-1,...], self.epsilon_a[t-1,...])
 
 
-	def LIF_recurrent_cell(self, rnn_input, z, v, a, y, z_hat, epsilon_v, epsilon_a):
+	def LIF_recurrent_cell(self, rnn_input, z, v, a, y, z_hat, epsilon_a):
 
 		I = rnn_input @ self.con_dict['W_in_const'] + z @ self.W_rnn_effective
 		v, a, z, A, v_th = run_lif(v, a, I, self.con_dict['lif'])
@@ -90,15 +90,15 @@ class Model:
 
 		h = par['eta'] * np.maximum(np.zeros(self.size_ref.shape), 1 - np.abs((v - A) / v_th))
 
-		h_broadcast = np.repeat(h, par['n_hidden'], axis=1).reshape((par['batch_size'], par['n_hidden'], par['n_hidden']))
+		#h_broadcast = np.repeat(h, par['n_hidden'], axis=1).reshape((par['batch_size'], par['n_hidden'], par['n_hidden']))
 
-		epsilon_a = h_broadcast * epsilon_v + (par['lif']['rho'] - (h_broadcast * par['lif']['beta'])) * epsilon_a
+		epsilon_a = h[:,:,cp.newaxis] @ z_hat[:,cp.newaxis,:] + (par['lif']['rho'] - (h[:,:,cp.newaxis] * par['lif']['beta'])) * epsilon_a
 
-		epsilon_v = np.repeat(z_hat, par['n_hidden'], axis=1).reshape((par['batch_size'], par['n_hidden'], par['n_hidden']))
+		#epsilon_v = np.repeat(z_hat, par['n_hidden'], axis=1).reshape((par['batch_size'], par['n_hidden'], par['n_hidden']))
 
 		z_hat = par['lif']['alpha'] * z_hat + z
 
-		return z, v, a, y, z_hat, epsilon_a, epsilon_v
+		return z, v, a, y, z_hat, epsilon_a
 
 
 	def AdEx_recurrent_cell(self, rnn_input, spike, V, w, y):
@@ -119,12 +119,18 @@ class Model:
 
 		#self.var_dict['W_rnn'] = self.var_dict['W_out'] @ (self.output_data - self.y)
 
-		delta_W_out = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output'], par['n_hidden']])
+		delta_W_out = cp.zeros([par['n_output'], par['n_hidden']])
+		kappa_array = cp.zeros(par['batch_size'], par['n_hidden'])
 
 		for t in range(par['num_time_steps']):
-			delta_W_out[t,...] = (self.output_data[t] - self.y[t]).reshape((256,3,1)) @ cp.sum((cp.power(self.con_dict['lif']['kappa'], cp.arange(t, -1, -1)).reshape((t+1,1,1)) * self.z[:t+1,...]), axis=0).reshape((256,1,100))
+			# kappa_array = cp.sum((cp.power(self.con_dict['lif']['kappa'], cp.arange(t, -1, -1)).reshape((t+1,1,1)) * self.z[:t+1,...]), axis=0)
 
-		self.var_dict['W_out'] += par['learning_rate'] * cp.sum(cp.mean(delta_W_out, axis=1), axis=0).T
+			kappa_array *= self.con_dict['lif']['kappa']
+			kappa_array += self.z[t,...]
+
+			delta_W_out[...] += cp.mean((self.output_data[t] - self.y[t])[:,:,cp.newaxis] @ kappa_array[:,cp.newaxis,:], axis=0)
+
+		self.var_dict['W_out'] += par['learning_rate'] * delta_W_out.T
 
 		#self.var_dict['b_out']
 
@@ -158,9 +164,6 @@ class Model:
 def main():
 
 	# Start the model run by loading the network controller and stimulus
-	print('\nStarting model run: {}'.format(par['cell_type']))
-	par['cell_type'] = 'lif'
-
 	print('\nStarting model run: {}'.format(par['cell_type']))
 
 	model = Model()
