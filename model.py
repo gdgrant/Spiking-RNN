@@ -82,7 +82,7 @@ class Model:
 
 	def LIF_recurrent_cell(self, rnn_input, z, v, a, y, z_hat, epsilon_v, epsilon_a):
 
-		I = rnn_input @ self.con_dict['w_in_const'] + z @ self.W_rnn_effective
+		I = rnn_input @ self.con_dict['W_in_const'] + z @ self.W_rnn_effective
 		v, a, z, A, v_th = run_lif(v, a, I, self.con_dict['lif'])
 
 		y = self.con_dict['lif']['kappa'] * y \
@@ -117,9 +117,14 @@ class Model:
 		# Calculate task loss
 		self.task_loss = cross_entropy(self.output_mask, self.output_data, self.y)
 
-		self.var_dict['W_rnn']
+		#self.var_dict['W_rnn'] = self.var_dict['W_out'] @ (self.output_data - self.y)
 
-		#self.var_dict['W_out']
+		delta_W_out = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output'], par['n_hidden']])
+
+		for t in range(par['num_time_steps']):
+			delta_W_out[t,...] = (self.output_data[t] - self.y[t]).reshape((256,3,1)) @ cp.sum((cp.power(self.con_dict['lif']['kappa'], cp.arange(t, -1, -1)).reshape((t+1,1,1)) * self.z[:t+1,...]), axis=0).reshape((256,1,100))
+
+		self.var_dict['W_out'] += par['learning_rate'] * cp.sum(cp.mean(delta_W_out, axis=1), axis=0).T
 
 		#self.var_dict['b_out']
 
@@ -154,6 +159,10 @@ def main():
 
 	# Start the model run by loading the network controller and stimulus
 	print('\nStarting model run: {}'.format(par['cell_type']))
+	par['cell_type'] = 'lif'
+
+	print('\nStarting model run: {}'.format(par['cell_type']))
+
 	model = Model()
 	stim  = Stimulus()
 

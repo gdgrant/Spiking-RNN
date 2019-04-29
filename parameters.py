@@ -14,6 +14,7 @@ par = {
 	'batch_size'            : 1024,
 	'iterations'            : 1000,
 	'cell_type'             : 'lif',   # 'lif', 'adex'
+	'learning_rate'			: 0.001,
 
 	# Network shape
 	'num_motion_tuned'      : 24,
@@ -26,6 +27,7 @@ par = {
 
 	# Pseudo derivative
 	'eta'					: 1.0,
+
 	# EI setup
 	'EI_prop'               : 0.8,
 	'balance_EI'            : True,
