@@ -26,7 +26,7 @@ par = {
 	'n_output'              : 3,
 
 	# Pseudo derivative
-	'eta'					: 1.0,
+	'eta'					: 0.3,
 
 	# EI setup
 	'EI_prop'               : 0.8,
