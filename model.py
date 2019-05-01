@@ -49,6 +49,7 @@ class Model:
 		self.z_hat = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		#self.epsilon_v = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], par['n_hidden']])
 		self.epsilon_a = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], par['n_hidden']])
+		self.h = cp.zeros([par['num_time_steps'], par['batch_size'],par['n_hidden']])
 
 		par['cell_type'] = 'lif'
 		# Initialize cell states
@@ -76,7 +77,7 @@ class Model:
 		# Loop across time
 		for t in range(par['num_time_steps']):
 
-			self.z[t,...], state, adapt, self.y[t,...], self.z_hat[t,...], self.epsilon_a[t,...] = \
+			self.z[t,...], state, adapt, self.y[t,...], self.z_hat[t,...], self.epsilon_a[t,...], self.h[t,...] = \
 				cell(self.input_data[t], self.z[t-1,...], state, adapt, self.y[t-1,...], self.z_hat[t-1,...], self.epsilon_a[t-1,...])
 
 
@@ -98,7 +99,7 @@ class Model:
 
 		z_hat = par['lif']['alpha'] * z_hat + z
 
-		return z, v, a, y, z_hat, epsilon_a
+		return z, v, a, y, z_hat, epsilon_a, h
 
 
 	def AdEx_recurrent_cell(self, rnn_input, spike, V, w, y):
@@ -117,18 +118,32 @@ class Model:
 		# Calculate task loss
 		self.task_loss = cross_entropy(self.output_mask, self.output_data, self.y)
 
-		#self.var_dict['W_rnn'] = self.var_dict['W_out'] @ (self.output_data - self.y)
+		# Update W_rnn
+		delta_W_rnn = cp.zeros([par['n_hidden'], par['n_hidden']])
+		kappa_array_rnn = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
 
+		# Update W_out
 		delta_W_out = cp.zeros([par['n_output'], par['n_hidden']])
-		kappa_array = cp.zeros(par['batch_size'], par['n_hidden'])
+		kappa_array_out = cp.zeros([par['batch_size'], par['n_hidden']])
 
 		for t in range(par['num_time_steps']):
+
+			L = cp.sum(self.var_dict['W_out'].T * (self.output_data[t] - self.y[t])[:,:,cp.newaxis], axis=1)
+
+			kappa_array_rnn *= self.con_dict['lif']['kappa']
+			kappa_array_rnn += self.h[t,...][:,:,cp.newaxis] * (self.z_hat[t-1,...][:,np.newaxis,:] - par['lif']['beta'] * self.epsilon_a[t,...])
+
+			delta_W_rnn += cp.mean(L[:,:,cp.newaxis] * kappa_array_rnn, axis=0)
+
 			# kappa_array = cp.sum((cp.power(self.con_dict['lif']['kappa'], cp.arange(t, -1, -1)).reshape((t+1,1,1)) * self.z[:t+1,...]), axis=0)
 
-			kappa_array *= self.con_dict['lif']['kappa']
-			kappa_array += self.z[t,...]
+			kappa_array_out *= self.con_dict['lif']['kappa']
+			kappa_array_out += self.z[t,...]
 
-			delta_W_out[...] += cp.mean((self.output_data[t] - self.y[t])[:,:,cp.newaxis] @ kappa_array[:,cp.newaxis,:], axis=0)
+			delta_W_out += cp.mean((self.output_data[t] - self.y[t])[:,:,cp.newaxis] @ kappa_array_out[:,cp.newaxis,:], axis=0)
+
+
+		self.var_dict['W_rnn'] += par['learning_rate'] * delta_W_rnn.T
 
 		self.var_dict['W_out'] += par['learning_rate'] * delta_W_out.T
 

@@ -50,7 +50,7 @@ par = {
 	'noise_in_sd'           : 0.2,
 
 	# Timing constants
-	'dt'                    : 1,
+	'dt'                    : 20,
 	'membrane_constant'     : 100,
 	'output_constant'       : 20,
 
