@@ -89,7 +89,7 @@ class Model:
 		y = self.con_dict['lif']['kappa'] * y \
 			+ z @ self.var_dict['W_out'] + self.var_dict['b_out']
 
-		h = cp.mean(par['eta'] * np.maximum(np.zeros(self.size_ref.shape), 1 - np.abs((v - A) / v_th)), axis=0)
+		h = cp.mean(par['eta'] * cp.maximum(cp.zeros(self.size_ref.shape), 1 - cp.abs((v - A) / v_th)), axis=0)
 
 		#h_broadcast = np.repeat(h, par['n_hidden'], axis=1).reshape((par['batch_size'], par['n_hidden'], par['n_hidden']))
 
@@ -131,7 +131,7 @@ class Model:
 			L = cp.mean(cp.sum(self.var_dict['W_out'].T * (self.output_data[t] - self.y[t])[:,:,cp.newaxis], axis=1), axis=0)
 
 			kappa_array_rnn *= self.con_dict['lif']['kappa']
-			kappa_array_rnn += self.h[t,...][:,cp.newaxis] * (self.z_hat[t-1,...][np.newaxis,:] - par['lif']['beta'] * self.epsilon_a[t,...])
+			kappa_array_rnn += self.h[t,...][:,cp.newaxis] * (self.z_hat[t-1,...][cp.newaxis,:] - par['lif']['beta'] * self.epsilon_a[t,...])
 
 			delta_W_rnn += L[:,cp.newaxis] * kappa_array_rnn
 
