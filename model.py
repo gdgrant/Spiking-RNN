@@ -46,10 +46,10 @@ class Model:
 		# Establish spike and output recording
 		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
-		self.z_hat = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
+		self.z_hat = cp.zeros([par['num_time_steps'], par['n_hidden']])
 		#self.epsilon_v = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], par['n_hidden']])
-		self.epsilon_a = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], par['n_hidden']])
-		self.h = cp.zeros([par['num_time_steps'], par['batch_size'],par['n_hidden']])
+		self.epsilon_a = cp.zeros([par['num_time_steps'], par['n_hidden'], par['n_hidden']])
+		self.h = cp.zeros([par['num_time_steps'], par['n_hidden']])
 
 		par['cell_type'] = 'lif'
 		# Initialize cell states
@@ -89,15 +89,15 @@ class Model:
 		y = self.con_dict['lif']['kappa'] * y \
 			+ z @ self.var_dict['W_out'] + self.var_dict['b_out']
 
-		h = par['eta'] * np.maximum(np.zeros(self.size_ref.shape), 1 - np.abs((v - A) / v_th))
+		h = cp.mean(par['eta'] * np.maximum(np.zeros(self.size_ref.shape), 1 - np.abs((v - A) / v_th)), axis=0)
 
 		#h_broadcast = np.repeat(h, par['n_hidden'], axis=1).reshape((par['batch_size'], par['n_hidden'], par['n_hidden']))
 
-		epsilon_a = h[:,:,cp.newaxis] @ z_hat[:,cp.newaxis,:] + (par['lif']['rho'] - (h[:,:,cp.newaxis] * par['lif']['beta'])) * epsilon_a
+		epsilon_a = h[:,cp.newaxis] @ z_hat[cp.newaxis,:] + (par['lif']['rho'] - (h[:,cp.newaxis] * par['lif']['beta'])) * epsilon_a
 
 		#epsilon_v = np.repeat(z_hat, par['n_hidden'], axis=1).reshape((par['batch_size'], par['n_hidden'], par['n_hidden']))
 
-		z_hat = par['lif']['alpha'] * z_hat + z
+		z_hat = par['lif']['alpha'] * z_hat + cp.mean(z, axis=0)
 
 		return z, v, a, y, z_hat, epsilon_a, h
 
@@ -120,27 +120,27 @@ class Model:
 
 		# Update W_rnn
 		delta_W_rnn = cp.zeros([par['n_hidden'], par['n_hidden']])
-		kappa_array_rnn = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
+		kappa_array_rnn = cp.zeros([par['n_hidden'], par['n_hidden']])
 
 		# Update W_out
 		delta_W_out = cp.zeros([par['n_output'], par['n_hidden']])
-		kappa_array_out = cp.zeros([par['batch_size'], par['n_hidden']])
+		kappa_array_out = cp.zeros(par['n_hidden'])
 
 		for t in range(par['num_time_steps']):
 
-			L = cp.sum(self.var_dict['W_out'].T * (self.output_data[t] - self.y[t])[:,:,cp.newaxis], axis=1)
+			L = cp.mean(cp.sum(self.var_dict['W_out'].T * (self.output_data[t] - self.y[t])[:,:,cp.newaxis], axis=1), axis=0)
 
 			kappa_array_rnn *= self.con_dict['lif']['kappa']
-			kappa_array_rnn += self.h[t,...][:,:,cp.newaxis] * (self.z_hat[t-1,...][:,np.newaxis,:] - par['lif']['beta'] * self.epsilon_a[t,...])
+			kappa_array_rnn += self.h[t,...][:,cp.newaxis] * (self.z_hat[t-1,...][np.newaxis,:] - par['lif']['beta'] * self.epsilon_a[t,...])
 
-			delta_W_rnn += cp.mean(L[:,:,cp.newaxis] * kappa_array_rnn, axis=0)
+			delta_W_rnn += L[:,cp.newaxis] * kappa_array_rnn
 
 			# kappa_array = cp.sum((cp.power(self.con_dict['lif']['kappa'], cp.arange(t, -1, -1)).reshape((t+1,1,1)) * self.z[:t+1,...]), axis=0)
 
 			kappa_array_out *= self.con_dict['lif']['kappa']
-			kappa_array_out += self.z[t,...]
+			kappa_array_out += cp.mean(self.z[t,...], axis=0)
 
-			delta_W_out += cp.mean((self.output_data[t] - self.y[t])[:,:,cp.newaxis] @ kappa_array_out[:,cp.newaxis,:], axis=0)
+			delta_W_out += cp.mean((self.output_data[t] - self.y[t])[:,:,cp.newaxis] @ kappa_array_out[cp.newaxis,:], axis=0)
 
 
 		self.var_dict['W_rnn'] += par['learning_rate'] * delta_W_rnn.T
