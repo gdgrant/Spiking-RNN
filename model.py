@@ -48,8 +48,14 @@ class Model:
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
 		self.z_hat = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		#self.epsilon_v = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], par['n_hidden']])
-		self.epsilon_a = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], par['n_hidden']])
-		self.h = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
+		epsilon_a = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
+		h = cp.zeros([par['batch_size'], par['n_hidden']])
+
+		#Optimization
+		self.kappa_array_rnn = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
+		self.kappa_array_out = cp.zeros([par['batch_size'], par['n_hidden']])
+		self.delta_W_rnn = cp.zeros([par['n_hidden'], par['n_hidden']])
+		self.delta_W_out = cp.zeros([par['n_output'], par['n_hidden']])
 
 		par['cell_type'] = 'lif'
 		# Initialize cell states
@@ -77,19 +83,32 @@ class Model:
 		# Loop across time
 		for t in range(par['num_time_steps']):
 
-			self.z[t,...], state, adapt, self.y[t,...], self.z_hat[t,...], self.epsilon_a[t,...], self.h[t,...] = \
-				cell(self.input_data[t], self.z[t-1,...], state, adapt, self.y[t-1,...], self.z_hat[t-1,...], self.epsilon_a[t-1,...])
+			self.z[t,...], state, adapt, self.y[t,...], self.z_hat[t,...], epsilon_a, h = \
+				cell(self.input_data[t], self.z[t-1,...], state, adapt, self.y[t-1,...], self.z_hat[t-1,...], epsilon_a)
+
+			L = cp.sum(self.var_dict['W_out'].T * (self.output_data[t] - self.y[t])[:,:,cp.newaxis], axis=1)
+
+			self.kappa_array_rnn *= self.con_dict['lif']['kappa']
+			self.kappa_array_rnn += h[:,:,cp.newaxis] * (self.z_hat[t-1,...][:,cp.newaxis,:] - par['lif']['beta'] * epsilon_a)
+
+			self.delta_W_rnn += cp.mean(L[:,:,cp.newaxis] * self.kappa_array_rnn, axis=0)
+			# kappa_array = cp.sum((cp.power(self.con_dict['lif']['kappa'], cp.arange(t, -1, -1)).reshape((t+1,1,1)) * self.z[:t+1,...]), axis=0)
+
+			self.kappa_array_out *= self.con_dict['lif']['kappa']
+			self.kappa_array_out += self.z[t,...]
+
+			self.delta_W_out += cp.mean((self.output_data[t] - self.y[t])[:,:,cp.newaxis] @ self.kappa_array_out[:,cp.newaxis,:], axis=0)
 
 
 	def LIF_recurrent_cell(self, rnn_input, z, v, a, y, z_hat, epsilon_a):
 
-		I = rnn_input @ self.con_dict['W_in_const'] + z @ self.W_rnn_effective
+		I = rnn_input @ self.var_dict['W_in'] + z @ self.W_rnn_effective
 		v, a, z, A, v_th = run_lif(v, a, I, self.con_dict['lif'])
 
 		y = self.con_dict['lif']['kappa'] * y \
 			+ z @ self.var_dict['W_out'] + self.var_dict['b_out']
 
-		h = par['eta'] * np.maximum(np.zeros(self.size_ref.shape), 1 - np.abs((v - A) / v_th))
+		h = par['eta'] * cp.maximum(cp.zeros(self.size_ref.shape), 1 - cp.abs((v - A) / v_th))
 		#h_broadcast = np.repeat(h, par['n_hidden'], axis=1).reshape((par['batch_size'], par['n_hidden'], par['n_hidden']))
 
 		epsilon_a = h[:,:,cp.newaxis] @ z_hat[:,cp.newaxis,:] + (par['lif']['rho'] - (h[:,:,cp.newaxis] * par['lif']['beta'])) * epsilon_a
@@ -117,14 +136,7 @@ class Model:
 		# Calculate task loss
 		self.task_loss = cross_entropy(self.output_mask, self.output_data, self.y)
 
-		# Update W_rnn
-		delta_W_rnn = cp.zeros([par['n_hidden'], par['n_hidden']])
-		kappa_array_rnn = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
-
-		# Update W_out
-		delta_W_out = cp.zeros([par['n_output'], par['n_hidden']])
-		kappa_array_out = cp.zeros([par['batch_size'], par['n_hidden']])
-
+		'''
 		for t in range(par['num_time_steps']):
 
 			L = cp.sum(self.var_dict['W_out'].T * (self.output_data[t] - self.y[t])[:,:,cp.newaxis], axis=1)
@@ -139,11 +151,12 @@ class Model:
 			kappa_array_out += self.z[t,...]
 
 			delta_W_out += cp.mean((self.output_data[t] - self.y[t])[:,:,cp.newaxis] @ kappa_array_out[:,cp.newaxis,:], axis=0)
+		'''
 
 
-		self.var_dict['W_rnn'] += par['learning_rate'] * delta_W_rnn.T
+		self.var_dict['W_rnn'] += par['learning_rate'] * self.delta_W_rnn.T
 
-		self.var_dict['W_out'] += par['learning_rate'] * delta_W_out.T
+		self.var_dict['W_out'] += par['learning_rate'] * self.delta_W_out.T
 
 		#self.var_dict['b_out']
 
