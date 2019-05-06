@@ -129,7 +129,7 @@ def update_dependencies():
 	# kappa = 0.75
 	# kappa = 15
 	# beta = 1.5
-	beta = 0.02
+	beta = 0.2
 	kappa = 3
 	z = beta/np.exp(kappa)
 	for i in range(par['n_hidden']//2):
