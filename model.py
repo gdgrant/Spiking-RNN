@@ -91,6 +91,10 @@ class Model:
 		elif par['cell_type'] == 'adex':
 			cell = self.AdEx_recurrent_cell
 
+		# For visualization of delta
+		self.delta_W_out_hist = []
+		self.delta_W_rnn_hist = []
+
 		# Loop across time
 		for t in range(par['num_time_steps']):
 
@@ -167,6 +171,9 @@ class Model:
 		self.var_dict['W_out'] += par['learning_rate'] * self.delta_W_out.T
 		self.var_dict['b_out'] += par['learning_rate'] * self.delta_b_out.T
 
+		# Saving delta W_out and delta W_rnn
+		self.delta_W_out_hist.append(cp.sum(self.delta_W_out))
+		self.delta_W_rnn_hist.append(cp.sum(self.delta_W_rnn))
 
 	def get_weights(self):
 
@@ -192,6 +199,32 @@ class Model:
 		self.full_accuracy = accuracy(self.y, self.output_data, self.output_mask, inc_fix=True)
 
 		return to_cpu(self.task_accuracy), to_cpu(self.full_accuracy)
+
+	def visualize_delta(self,i):
+		# Plot the delta W_out and W_rnn over iterations
+		fig, ax = plt.subplots(1,2, figsize=(12,8))
+		ax[0].plot(self.delta_W_rnn_hist)
+		ax[0].set_title('delta_W_rnn')
+		ax[1].plot(self.delta_W_out_hist)
+		ax[1].set_title('delta_W_out')
+
+		plt.savefig('./savedir/delta_iter{}.png'.format(i), bbox_inches='tight')
+		plt.clf()
+		plt.close()
+
+		# Imshow the delta W_out and W_rnn at iteration i
+
+		plt.figure()
+		plt.imshow(to_cpu(self.delta_W_rnn), aspect='auto')
+		plt.colorbar()
+		plt.savefig('./savedir/delta_W_rnn_iter{}.png'.format(i), bbox_inches='tight')
+		plt.close()
+
+		plt.figure()
+		plt.imshow(to_cpu(self.delta_W_out), aspect='auto')
+		plt.colorbar()
+		plt.savefig('./savedir/delta_W_out_iter{}.png'.format(i), bbox_inches='tight')
+		plt.close()
 
 
 def main():
@@ -235,8 +268,22 @@ def main():
 			ax[3].plot(to_cpu(np.mean(model.z, axis=(1,2))))
 			ax[3].set_title('All Trials Mean Spiking')
 
-			#for a in range(4):
-			#	ax[a].set_xticks([])
+
+		if i%50 == 0:
+			model.visualize_delta(i)
+
+		fig, ax = plt.subplots(4,1, figsize=(16,10))
+		ax[0].imshow(to_cpu(model.input_data[:,0,:].T), aspect='auto')
+		ax[0].set_title('Input Data')
+		ax[1].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
+		ax[1].set_title('Spiking')
+		ax[2].plot(to_cpu(np.mean(model.z[:,0,:], axis=(1))))
+		ax[2].set_title('Trial 0 Mean Spiking')
+		ax[3].plot(to_cpu(np.mean(model.z, axis=(1,2))))
+		ax[3].set_title('All Trials Mean Spiking')
+
+		for a in range(4):
+			ax[a].set_xticks([])
 
 			plt.savefig('./savedir/diagnostic_iter{:0>4}.png'.format(i), bbox_inches='tight')
 			plt.clf()

@@ -79,8 +79,9 @@ class Stimulus:
 		test_direction = np.where(match, sample_direction, test_direction)
 		match = np.where(test_direction==sample_direction, True, match)
 		
+		trial_info['neural_input'][:end_dead_time,:,:] += par['tuning_height']/2
 		if par['fixation_on']:
-			trial_info['neural_input'][end_dead_time:end_delay_time,:,par['num_motion_tuned']:par['num_motion_tuned']+par['num_fix_tuned']] += self.fix_tuning[np.newaxis,:,0]
+			trial_info['neural_input'][:end_delay_time,:,par['num_motion_tuned']:par['num_motion_tuned']+par['num_fix_tuned']] += self.fix_tuning[np.newaxis,:,0]
 
 		output_neuron = np.where(match, 1, 2)
 		trial_info['desired_output'][:end_delay_time,:,0] = 1.
@@ -116,8 +117,9 @@ class Stimulus:
 
 		sample_direction   = np.random.choice(par['num_motion_dirs'], size=par['batch_size'])
 
+		trial_info['neural_input'][:end_dead_time,:,:] += par['tuning_height']/2
 		if par['fixation_on']:
-			trial_info['neural_input'][end_dead_time:end_delay_time,:,par['num_motion_tuned']:par['num_motion_tuned']+par['num_fix_tuned']] += self.fix_tuning[np.newaxis,:,0]
+			trial_info['neural_input'][:end_delay_time,:,par['num_motion_tuned']:par['num_motion_tuned']+par['num_fix_tuned']] += self.fix_tuning[np.newaxis,:,0]
 
 		output_neuron = np.where(sample_direction < 4, 1, 2)
 		trial_info['desired_output'][end_dead_time:end_delay_time,:,0] = 1.
