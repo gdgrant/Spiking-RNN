@@ -122,7 +122,7 @@ def update_dependencies():
 	### LIF spiking (max 40-50 Hz; 10-20 Hz for preferred dir)
 
 	par['W_in_const']   = np.zeros((par['n_input'], par['n_hidden']))
-	U = np.arange(0, 360, 13) #73
+	U = np.linspace(0, 360, par['n_input']//2)
 	# beta = 0.04
 	# kappa = 2
 	# beta = 0.04
@@ -132,7 +132,7 @@ def update_dependencies():
 	beta = 0.2
 	kappa = 4
 	z = beta/np.exp(kappa)
-	for i in range(73):
+	for i in range(int(par['n_hidden']*0.7)):
 		y = z * np.exp(kappa*np.cos(np.radians(U - i*5)))
 		par['W_in_const'][:,i] = y
 
