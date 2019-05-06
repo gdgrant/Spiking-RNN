@@ -56,7 +56,7 @@ par = {
 	'latency'				: 10,	# No latency = 1 ms
 
 	# Task setup
-	'task'                  : 'dms',
+	'task'                  : 'oic',
 	'kappa'                 : 2.0,
 	'tuning_height'         : 100.0,
 	'response_multiplier'   : 1.,
@@ -121,19 +121,19 @@ def update_dependencies():
 
 	### LIF spiking (max 40-50 Hz; 10-20 Hz for preferred dir)
 
-	par['W_in_const']   = np.zeros((par['n_input'], par['n_hidden']))
-	U = np.linspace(0, 360, par['n_input']//2)
+	par['W_in_const'] = np.zeros((par['n_input'], par['n_hidden']))
+	U = np.linspace(0, 360, par['n_input'])
 	# beta = 0.04
 	# kappa = 2
 	# beta = 0.04
 	# kappa = 0.75
 	# kappa = 15
 	# beta = 1.5
-	beta = 0.2
-	kappa = 4
+	beta = 0.02
+	kappa = 3
 	z = beta/np.exp(kappa)
-	for i in range(int(par['n_hidden']*0.7)):
-		y = z * np.exp(kappa*np.cos(np.radians(U - i*5)))
+	for i in range(par['n_hidden']//2):
+		y = z * np.exp(kappa*np.cos(np.radians(U - i*((2*par['n_hidden'])/par['n_input']))))
 		par['W_in_const'][:,i] = y
 
 	par['W_in_init'] = par['W_in_const']
