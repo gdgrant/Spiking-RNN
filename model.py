@@ -213,13 +213,13 @@ class Model:
 		# Imshow the delta W_out and W_rnn at iteration i
 
 		plt.figure()
-		plt.imshow(self.delta_W_rnn, aspect='auto')
+		plt.imshow(to_cpu(self.delta_W_rnn), aspect='auto')
 		plt.colorbar()
 		plt.savefig('./savedir/delta_W_rnn_iter{}.png'.format(i), bbox_inches='tight')
 		plt.close()
 
 		plt.figure()
-		plt.imshow(self.delta_W_out, aspect='auto')
+		plt.imshow(to_cpu(self.delta_W_out), aspect='auto')
 		plt.colorbar()
 		plt.savefig('./savedir/delta_W_out_iter{}.png'.format(i), bbox_inches='tight')
 		plt.close()
