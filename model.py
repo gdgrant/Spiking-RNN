@@ -75,6 +75,7 @@ class Model:
 		self.kappa_array_out = cp.zeros([par['batch_size'], par['n_hidden']])
 		self.delta_W_rnn = cp.zeros([par['n_hidden'], par['n_hidden']])
 		self.delta_W_out = cp.zeros([par['n_output'], par['n_hidden']])
+		self.delta_b_out = cp.zeros([par['n_output'], 1])
 
 		# Initialize cell states
 		if par['cell_type'] == 'lif':
@@ -121,7 +122,7 @@ class Model:
 
 			# Update output weight delta
 			self.delta_W_out += cp.mean(L_out[:,:,cp.newaxis] @ self.kappa_array_out[:,cp.newaxis,:], axis=0)
-
+			self.delta_b_out += cp.mean(L_out[:,:,cp.newaxis], axis=0)
 
 	def LIF_recurrent_cell(self, rnn_input, z, v, a, y, z_hat, epsilon_a):
 
@@ -164,6 +165,7 @@ class Model:
 
 		self.var_dict['W_rnn'] += par['learning_rate'] * self.delta_W_rnn.T
 		self.var_dict['W_out'] += par['learning_rate'] * self.delta_W_out.T
+		self.var_dict['b_out'] += par['learning_rate'] * self.delta_b_out.T
 
 
 	def get_weights(self):
@@ -222,23 +224,23 @@ def main():
 		info_str1 = 'Full Acc: {:5.3f} | Mean Spiking: {:6.3f} Hz'.format(\
 			full_accuracy, mean_spiking)
 		print(info_str0 + info_str1)
+		if i%10==0:
+			fig, ax = plt.subplots(4,1, figsize=(16,10))
+			ax[0].imshow(to_cpu(model.input_data[:,0,:].T), aspect='auto')
+			ax[0].set_title('Input Data')
+			ax[1].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
+			ax[1].set_title('Spiking')
+			ax[2].plot(to_cpu(np.mean(model.z[:,0,:], axis=(1))))
+			ax[2].set_title('Trial 0 Mean Spiking')
+			ax[3].plot(to_cpu(np.mean(model.z, axis=(1,2))))
+			ax[3].set_title('All Trials Mean Spiking')
 
-		fig, ax = plt.subplots(4,1, figsize=(16,10))
-		ax[0].imshow(to_cpu(model.input_data[:,0,:].T), aspect='auto')
-		ax[0].set_title('Input Data')
-		ax[1].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
-		ax[1].set_title('Spiking')
-		ax[2].plot(to_cpu(np.mean(model.z[:,0,:], axis=(1))))
-		ax[2].set_title('Trial 0 Mean Spiking')
-		ax[3].plot(to_cpu(np.mean(model.z, axis=(1,2))))
-		ax[3].set_title('All Trials Mean Spiking')
+			#for a in range(4):
+			#	ax[a].set_xticks([])
 
-		for a in range(4):
-			ax[a].set_xticks([])
-
-		plt.savefig('./savedir/diagnostic_iter{:0>4}.png'.format(i), bbox_inches='tight')
-		plt.clf()
-		plt.close()
+			plt.savefig('./savedir/diagnostic_iter{:0>4}.png'.format(i), bbox_inches='tight')
+			plt.clf()
+			plt.close()
 
 
 if __name__ == '__main__':
