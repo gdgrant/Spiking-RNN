@@ -4,6 +4,10 @@ from adex import run_adex
 from adaptive_lif import run_lif
 from stimulus import Stimulus
 
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
 class Model:
 
 	def __init__(self):
@@ -219,15 +223,26 @@ def main():
 			full_accuracy, mean_spiking)
 		print(info_str0 + info_str1)
 
-		# import matplotlib.pyplot as plt
-		# fig, ax = plt.subplots(4,1)
-		# ax[0].imshow(to_cpu(model.input_data[:,0,:].T), aspect='auto')
-		# ax[1].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
-		# ax[2].plot(to_cpu(np.mean(model.z[:,0,:], axis=(1))))
-		# ax[3].plot(to_cpu(np.mean(model.z, axis=(1,2))))
-		# plt.show()
-		# quit()
+		fig, ax = plt.subplots(4,1, figsize=(16,10))
+		ax[0].imshow(to_cpu(model.input_data[:,0,:].T), aspect='auto')
+		ax[0].set_title('Input Data')
+		ax[1].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
+		ax[1].set_title('Spiking')
+		ax[2].plot(to_cpu(np.mean(model.z[:,0,:], axis=(1))))
+		ax[2].set_title('Trial 0 Mean Spiking')
+		ax[3].plot(to_cpu(np.mean(model.z, axis=(1,2))))
+		ax[3].set_title('All Trials Mean Spiking')
+
+		for a in range(4):
+			ax[a].set_xticks([])
+
+		plt.savefig('./savedir/diagnostic_iter{:0>4}.png'.format(i), bbox_inches='tight')
+		plt.clf()
+		plt.close()
 
 
 if __name__ == '__main__':
-	main()
+	try:
+		main()
+	except KeyboardInterrupt:
+		quit('\nQuit by KeyboardInterrupt.\n')
