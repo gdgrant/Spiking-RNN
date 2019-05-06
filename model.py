@@ -1,4 +1,3 @@
-from collections import deque
 from utils import *
 from parameters import par, update_dependencies
 from adex import run_adex
@@ -94,9 +93,12 @@ class Model:
 			self.z[t,...], state, adapt, self.y[t,...], self.z_hat[t,...], epsilon_a, h = \
 				cell(self.input_data[t], self.z[t-par['latency'],...], state, adapt, self.y[t-1,...], self.z_hat[t-par['latency'],...], epsilon_a)
 
+			# Calculate output error
+			output_error = self.output_data[t] - softmax(self.y[t])
+
 			### Equations 4, 5, 46, 47
 			# Calculate learning signal for recurrent weights
-			L_rec = cp.sum(self.var_dict['W_out'].T[cp.newaxis,...] * (self.output_data[t] - self.y[t])[...,cp.newaxis], axis=1)
+			L_rec = self.output_mask[t,:,cp.newaxis]*cp.sum(self.var_dict['W_out'].T[cp.newaxis,...] * output_error[...,cp.newaxis], axis=1)
 
 			# Calculate trace impact on learning signal for rec. weights (Eq. 47)
 			self.kappa_array_rnn *= self.con_dict['lif']['kappa']
@@ -107,14 +109,14 @@ class Model:
 
 			### Equation 48
 			# Calculate learning signal for output weights
-			L_out = self.output_data[t] - self.y[t]
+			L_out = self.output_mask[t,:,cp.newaxis] * output_error
 
 			# Calculate output impact on learning signal for output weights
 			self.kappa_array_out *= self.con_dict['lif']['kappa']
 			self.kappa_array_out += self.z[t,...]
 
 			# Update output weight delta
-			self.delta_W_out += cp.mean(L_out[:,:,cp.newaxis] * self.kappa_array_out[:,cp.newaxis,:], axis=0)
+			self.delta_W_out += cp.mean(L_out[:,:,cp.newaxis] @ self.kappa_array_out[:,cp.newaxis,:], axis=0)
 
 
 	def LIF_recurrent_cell(self, rnn_input, z, v, a, y, z_hat, epsilon_a):
@@ -190,6 +192,7 @@ def main():
 
 	# Start the model run by loading the network controller and stimulus
 	print('\nStarting model run: {}'.format(par['cell_type']))
+	print('Task type: {}'.format(par['task']))
 
 	model = Model()
 	stim  = Stimulus()
