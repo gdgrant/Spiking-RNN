@@ -26,7 +26,7 @@ par = {
 	'n_output'              : 3,
 
 	# Pseudo derivative
-	'eta'					: 0.3,
+	'gamma'					: 0.3,
 
 	# EI setup
 	'EI_prop'               : 0.8,
@@ -43,16 +43,17 @@ par = {
 	'adam_epsilon'          : 1e-8,
 
 	# Noise and weight scaling values
-	'input_gamma'           : 0.08,
+	'input_gamma'           : 0.008,
 	'rnn_gamma'             : 0.04,
 	'output_gamma'          : 0.08,
 	'noise_rnn_sd'          : 0.05,
 	'noise_in_sd'           : 0.2,
 
 	# Timing constants
-	'dt'                    : 20,
+	'dt'                    : 1,
 	'membrane_constant'     : 100,
 	'output_constant'       : 20,
+	'latency'				: 10,	# No latency = 1 ms
 
 	# Task setup
 	'task'                  : 'dms',
@@ -66,7 +67,7 @@ par = {
 	'dead_time'             : 100,
 	'fix_time'              : 200,
 	'sample_time'           : 200,
-	'delay_time'            : 300,
+	'delay_time'            : 100,
 	'test_time'             : 200,
 	'mask_time'             : 40,
 }
@@ -122,17 +123,20 @@ def update_dependencies():
 
 	par['W_in_const']   = np.zeros((par['n_input'], par['n_hidden']))
 	U = np.arange(0, 360, 13) #73
-	print(U)
 	# beta = 0.04
 	# kappa = 2
 	# beta = 0.04
 	# kappa = 0.75
-	beta = 1.5
-	kappa = 15
+	# kappa = 15
+	# beta = 1.5
+	beta = 0.2
+	kappa = 4
 	z = beta/np.exp(kappa)
 	for i in range(73):
 		y = z * np.exp(kappa*np.cos(np.radians(U - i*5)))
 		par['W_in_const'][:,i] = y
+
+	par['W_in_init'] = par['W_in_const']
 
 	# import matplotlib.pyplot as plt
 	# fig, ax = plt.subplots(2,1)
@@ -178,7 +182,6 @@ def update_dependencies():
 	par['lif']['alpha'] = np.exp(-par['dt_sec']/par['lif']['tau_m'])
 	par['lif']['rho']   = np.exp(-par['dt_sec']/par['lif']['tau_a'])
 	par['lif']['kappa']	= np.exp(-par['dt_sec']/par['lif']['tau_o'])
-		
 
 update_dependencies()
 print('--> Parameters loaded.\n')

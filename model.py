@@ -1,3 +1,4 @@
+from collections import deque
 from utils import *
 from parameters import par, update_dependencies
 from adex import run_adex
@@ -7,6 +8,7 @@ from stimulus import Stimulus
 class Model:
 
 	def __init__(self):
+		""" Initialize model with constants, variables, and references """
 
 		self.make_constants()
 		self.make_variables()
@@ -14,16 +16,8 @@ class Model:
 		self.size_ref = cp.ones([par['batch_size'],par['n_hidden']])
 
 
-	def make_variables(self):
-
-		var_names = ['W_in', 'W_out', 'W_rnn', 'b_out']
-
-		self.var_dict = {}
-		for v in var_names:
-			self.var_dict[v] = to_gpu(par[v+'_init'])
-
-
 	def make_constants(self):
+		""" Import constants from CPU to GPU """
 
 		constants = [
 			'n_hidden', 'noise_rnn', 'adex', 'lif', \
@@ -35,7 +29,29 @@ class Model:
 			self.con_dict[c] = to_gpu(par[c])
 
 
+	def make_variables(self):
+		""" Import variables from CPU to GPU, and apply any one-time
+			variable operations """
+
+		var_names = ['W_in', 'W_out', 'W_rnn', 'b_out']
+
+		self.var_dict = {}
+		for v in var_names:
+			self.var_dict[v] = to_gpu(par[v+'_init'])
+
+		# Apply EI mask
+		if par['EI_prop'] != 1.:
+			self.W_rnn_effective = apply_EI(self.var_dict['W_rnn'], self.con_dict['EI_mask'])
+		else:
+			self.W_rnn_effective = self.var_dict['W_rnn']
+
+
 	def run_model(self, trial_info):
+		""" Run the model by:
+			 - Loading trial data
+			 - Setting initial states
+			 - Iterating over trial data
+			 - Collecting states and updates over time """
 
 		# Load the input data, target data, and mask to GPU
 		trial_info = to_gpu(trial_info)
@@ -47,9 +63,9 @@ class Model:
 		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
 		self.z_hat = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
-		#self.epsilon_v = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], par['n_hidden']])
+
 		epsilon_a = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
-		h = cp.zeros([par['batch_size'], par['n_hidden']])
+		h         = cp.zeros([par['batch_size'], par['n_hidden']])
 
 		#Optimization
 		self.kappa_array_rnn = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
@@ -57,22 +73,13 @@ class Model:
 		self.delta_W_rnn = cp.zeros([par['n_hidden'], par['n_hidden']])
 		self.delta_W_out = cp.zeros([par['n_output'], par['n_hidden']])
 
-		par['cell_type'] = 'lif'
 		# Initialize cell states
 		if par['cell_type'] == 'lif':
-			self.z[-1,...] = 0. * self.size_ref
 			state = 0. * self.size_ref
 			adapt = 1. * self.size_ref
 		elif par['cell_type'] == 'adex':
-			self.z[-1,...] = 0. * self.size_ref
 			state = self.con_dict['adex']['V_r'] * self.size_ref
 			adapt = self.con_dict['w_init'] * self.size_ref
-
-		# Apply EI mask
-		if par['EI_prop'] != 1.:
-			self.W_rnn_effective = apply_EI(self.var_dict['W_rnn'], self.con_dict['EI_mask'])
-		else:
-			self.W_rnn_effective = self.var_dict['W_rnn']
 
 		# Set cell type
 		if par['cell_type'] == 'lif':
@@ -83,38 +90,50 @@ class Model:
 		# Loop across time
 		for t in range(par['num_time_steps']):
 
+			# Run cell step
 			self.z[t,...], state, adapt, self.y[t,...], self.z_hat[t,...], epsilon_a, h = \
-				cell(self.input_data[t], self.z[t-1,...], state, adapt, self.y[t-1,...], self.z_hat[t-1,...], epsilon_a)
+				cell(self.input_data[t], self.z[t-par['latency'],...], state, adapt, self.y[t-1,...], self.z_hat[t-par['latency'],...], epsilon_a)
 
-			L = cp.sum(self.var_dict['W_out'].T * (self.output_data[t] - self.y[t])[:,:,cp.newaxis], axis=1)
+			### Equations 4, 5, 46, 47
+			# Calculate learning signal for recurrent weights
+			L_rec = cp.sum(self.var_dict['W_out'].T[cp.newaxis,...] * (self.output_data[t] - self.y[t])[...,cp.newaxis], axis=1)
 
+			# Calculate trace impact on learning signal for rec. weights (Eq. 47)
 			self.kappa_array_rnn *= self.con_dict['lif']['kappa']
 			self.kappa_array_rnn += h[:,:,cp.newaxis] * (self.z_hat[t-1,...][:,cp.newaxis,:] - par['lif']['beta'] * epsilon_a)
 
-			self.delta_W_rnn += cp.mean(L[:,:,cp.newaxis] * self.kappa_array_rnn, axis=0)
-			# kappa_array = cp.sum((cp.power(self.con_dict['lif']['kappa'], cp.arange(t, -1, -1)).reshape((t+1,1,1)) * self.z[:t+1,...]), axis=0)
+			# Update recurrent weight delta
+			self.delta_W_rnn += cp.mean(L_rec[:,:,cp.newaxis] * self.kappa_array_rnn, axis=0)
 
+			### Equation 48
+			# Calculate learning signal for output weights
+			L_out = self.output_data[t] - self.y[t]
+
+			# Calculate output impact on learning signal for output weights
 			self.kappa_array_out *= self.con_dict['lif']['kappa']
 			self.kappa_array_out += self.z[t,...]
 
-			self.delta_W_out += cp.mean((self.output_data[t] - self.y[t])[:,:,cp.newaxis] @ self.kappa_array_out[:,cp.newaxis,:], axis=0)
+			# Update output weight delta
+			self.delta_W_out += cp.mean(L_out[:,:,cp.newaxis] * self.kappa_array_out[:,cp.newaxis,:], axis=0)
 
 
 	def LIF_recurrent_cell(self, rnn_input, z, v, a, y, z_hat, epsilon_a):
 
+		# Calculate input current and get LIF cell states (Eq. 11, 25, 26)
 		I = rnn_input @ self.var_dict['W_in'] + z @ self.W_rnn_effective
 		v, a, z, A, v_th = run_lif(v, a, I, self.con_dict['lif'])
 
-		y = self.con_dict['lif']['kappa'] * y \
-			+ z @ self.var_dict['W_out'] + self.var_dict['b_out']
+		# Calculate output based on current cell state (Eq. 12)
+		y = self.con_dict['lif']['kappa'] * y + z @ self.var_dict['W_out'] + self.var_dict['b_out']
 
-		h = par['eta'] * cp.maximum(cp.zeros(self.size_ref.shape), 1 - cp.abs((v - A) / v_th))
-		#h_broadcast = np.repeat(h, par['n_hidden'], axis=1).reshape((par['batch_size'], par['n_hidden'], par['n_hidden']))
+		# Update h, the pseudo-derivative (Eq. 5, ~24)
+		# Bellec et al., 2018b
+		h = par['gamma'] * cp.maximum(0., 1 - cp.abs((v-A)/v_th))
 
+		# Calculate eligibility trace (Eq. 27)
 		epsilon_a = h[:,:,cp.newaxis] @ z_hat[:,cp.newaxis,:] + (par['lif']['rho'] - (h[:,:,cp.newaxis] * par['lif']['beta'])) * epsilon_a
 
-		#epsilon_v = np.repeat(z_hat, par['n_hidden'], axis=1).reshape((par['batch_size'], par['n_hidden'], par['n_hidden']))
-
+		# Update z_hat, the trace of pre-synaptic activity
 		z_hat = par['lif']['alpha'] * z_hat + z
 
 		return z, v, a, y, z_hat, epsilon_a, h
@@ -132,33 +151,13 @@ class Model:
 
 
 	def optimize(self):
+		""" Optimize the model -- apply any collected updates """
 
 		# Calculate task loss
 		self.task_loss = cross_entropy(self.output_mask, self.output_data, self.y)
 
-		'''
-		for t in range(par['num_time_steps']):
-
-			L = cp.sum(self.var_dict['W_out'].T * (self.output_data[t] - self.y[t])[:,:,cp.newaxis], axis=1)
-
-			kappa_array_rnn *= self.con_dict['lif']['kappa']
-			kappa_array_rnn += self.h[t,...][:,:,cp.newaxis] * (self.z_hat[t-1,...][:,cp.newaxis,:] - par['lif']['beta'] * self.epsilon_a[t,...])
-
-			delta_W_rnn += cp.mean(L[:,:,cp.newaxis] * kappa_array_rnn, axis=0)
-			# kappa_array = cp.sum((cp.power(self.con_dict['lif']['kappa'], cp.arange(t, -1, -1)).reshape((t+1,1,1)) * self.z[:t+1,...]), axis=0)
-
-			kappa_array_out *= self.con_dict['lif']['kappa']
-			kappa_array_out += self.z[t,...]
-
-			delta_W_out += cp.mean((self.output_data[t] - self.y[t])[:,:,cp.newaxis] @ kappa_array_out[:,cp.newaxis,:], axis=0)
-		'''
-
-
 		self.var_dict['W_rnn'] += par['learning_rate'] * self.delta_W_rnn.T
-
 		self.var_dict['W_out'] += par['learning_rate'] * self.delta_W_out.T
-
-		#self.var_dict['b_out']
 
 
 	def get_weights(self):
