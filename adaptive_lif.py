@@ -28,7 +28,7 @@ def lif_spike(v, a, c):
 	A = c['v_th'] + c['beta']*a
 	v_th = c['v_th']
 
-	return heaviside((v-A)/c['v_th']), A, v_th
+	return heaviside((v-A)/v_th), A, v_th
 
 def heaviside(x):
 	""" Perform the Heaviside step function """
