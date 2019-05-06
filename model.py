@@ -91,7 +91,7 @@ class Model:
 
 			# Run cell step
 			self.z[t,...], state, adapt, self.y[t,...], self.z_hat[t,...], epsilon_a, h = \
-				cell(self.input_data[t], self.z[t-par['latency'],...], state, adapt, self.y[t-1,...], self.z_hat[t-par['latency'],...], epsilon_a)
+				cell(self.input_data[t], self.z[t-par['latency'],...], state, adapt, self.y[t-1,...], self.z_hat[t-1,...], epsilon_a)
 
 			# Calculate output error
 			output_error = self.output_data[t] - softmax(self.y[t])
@@ -141,15 +141,15 @@ class Model:
 		return z, v, a, y, z_hat, epsilon_a, h
 
 
-	def AdEx_recurrent_cell(self, rnn_input, spike, V, w, y):
+	def AdEx_recurrent_cell(self, rnn_input, z, V, w, y):
 
-		I = rnn_input @ self.var_dict['W_in'] + spike @ self.W_rnn_effective
-		V, w, spike = run_adex(V, w, I, self.con_dict['adex'])
+		I = rnn_input @ self.var_dict['W_in'] + z @ self.W_rnn_effective
+		V, w, z = run_adex(V, w, I, self.con_dict['adex'])
 
-		y = self.con_dict['beta_neuron'] * y \
-			+ spike @ self.var_dict['W_out'] + self.var_dict['b_out']
-		
-		return spike, V, w, y
+		# Calculate output based on current cell state (Eq. 12)
+		y = self.con_dict['lif']['kappa'] * y + z @ self.var_dict['W_out'] + self.var_dict['b_out']
+
+		return z, V, w, y
 
 
 	def optimize(self):
