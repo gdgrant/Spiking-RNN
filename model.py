@@ -13,13 +13,13 @@ class Model:
 	def __init__(self):
 		""" Initialize model with constants, variables, and references """
 
-		self.make_constants()
-		self.make_variables()
+		self.init_constants()
+		self.init_variables()
 
 		self.size_ref = cp.ones([par['batch_size'],par['n_hidden']])
 
 
-	def make_constants(self):
+	def init_constants(self):
 		""" Import constants from CPU to GPU """
 
 		constants = [
@@ -32,7 +32,7 @@ class Model:
 			self.con_dict[c] = to_gpu(par[c])
 
 
-	def make_variables(self):
+	def init_variables(self):
 		""" Import variables from CPU to GPU, and apply any one-time
 			variable operations """
 
@@ -42,6 +42,11 @@ class Model:
 		for v in var_names:
 			self.var_dict[v] = to_gpu(par[v+'_init'])
 
+
+	def apply_variable_rules(self):
+		""" Apply rules to the variables that must be applied every
+			time the model is run """
+
 		# Apply EI mask
 		if par['EI_prop'] != 1.:
 			self.W_rnn_effective = apply_EI(self.var_dict['W_rnn'], self.con_dict['EI_mask'])
@@ -50,7 +55,7 @@ class Model:
 
 		# Apply mask to the recurrent weights
 		self.W_rnn_effective *= self.con_dict['W_rnn_mask']
-		
+
 
 	def run_model(self, trial_info):
 		""" Run the model by:
@@ -65,6 +70,9 @@ class Model:
 		self.output_data = trial_info['desired_output']
 		self.output_mask = trial_info['train_mask']
 
+		# Establish variable rules
+		self.apply_variable_rules()
+		
 		# Establish spike and output recording
 		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
@@ -262,7 +270,7 @@ def main():
 		info_str1 = 'Full Acc: {:5.3f} | Mean Spiking: {:6.3f} Hz'.format(\
 			full_accuracy, mean_spiking)
 		print(info_str0 + info_str1)
-		
+
 		if i%10==0:
 			fig, ax = plt.subplots(4,1, figsize=(16,10))
 			ax[0].imshow(to_cpu(model.input_data[:,0,:].T), aspect='auto')
