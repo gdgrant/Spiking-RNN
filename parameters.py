@@ -9,6 +9,7 @@ par = {
 	# Context
 	'save_dir'              : './savedir/',
 	'save_fn'               : 'lif_testing',
+	'optimizer'				: 'adam',
 
 	# Training environment
 	'batch_size'            : 1024,

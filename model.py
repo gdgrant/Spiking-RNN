@@ -3,6 +3,7 @@ from parameters import par, update_dependencies
 from adex import run_adex
 from adaptive_lif import run_lif
 from stimulus import Stimulus
+from optimizers import Standard, AdamOpt
 
 import matplotlib
 matplotlib.use('Agg')
@@ -23,6 +24,15 @@ class Model:
 		self.delta_W_rnn_hist = []
 		self.delta_W_inp_hist = []
 
+		if par['optimizer']	== 'standard':
+			self.optimizer = Standard(self.var_dict, par['learning_rate'])
+		elif par['optimizer'] == 'adam':
+			self.optimizer = AdamOpt(self.var_dict, par['learning_rate'], \
+				par['adam_beta1'], par['adam_beta2'], par['adam_epsilon'])
+		else:
+			raise Exception('Optimizer "{}" not available.'.format(par['optimizer']))
+
+
 	def init_constants(self):
 		""" Import constants from CPU to GPU """
 
@@ -40,11 +50,19 @@ class Model:
 		""" Import variables from CPU to GPU, and apply any one-time
 			variable operations """
 
-		var_names = ['W_in', 'W_out', 'W_rnn', 'b_out']
+		self.var_names = ['W_in', 'W_out', 'W_rnn', 'b_out']
 
-		self.var_dict = {}
-		for v in var_names:
-			self.var_dict[v] = to_gpu(par[v+'_init'])
+		self.var_dict  = {}
+		self.grad_dict = {}
+		for v in self.var_names:
+			self.var_dict[v]  = to_gpu(par[v+'_init'])
+			self.grad_dict[v] = cp.zeros_like(self.var_dict[v])
+
+	def zero_grads(self):
+		""" Set all gradient arrays to zero """
+
+		for v in self.var_names:
+			self.grad_dict[v] = cp.zeros_like(self.var_dict[v])
 
 
 	def apply_variable_rules(self):
@@ -77,6 +95,9 @@ class Model:
 		# Establish variable rules
 		self.apply_variable_rules()
 		
+		# Clear gradients
+		self.zero_grads()
+
 		# Establish spike and output recording
 		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
@@ -88,15 +109,11 @@ class Model:
 		rnn_epsilon_a = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
 		h = cp.zeros([par['batch_size'], par['n_hidden']])
 
-		# Optimization states
+		# Clear optimization states
 		self.kappa_array_inp = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
 		self.kappa_array_rnn = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
 		self.kappa_array_out = cp.zeros([par['batch_size'], par['n_hidden']])
-		self.delta_W_inp = cp.zeros([par['n_hidden'], par['n_input']])
-		self.delta_W_rnn = cp.zeros([par['n_hidden'], par['n_hidden']])
-		self.delta_W_out = cp.zeros([par['n_output'], par['n_hidden']])
-		self.delta_b_out = cp.zeros([par['n_output'], 1])
-
+		
 		# Initialize cell states
 		if par['cell_type'] == 'lif':
 			state = 0. * self.size_ref
@@ -171,10 +188,10 @@ class Model:
 		self.kappa_array_out += self.z[t,...]
 
 		### Update pending weight changes
-		self.delta_W_inp += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa_array_inp, axis=0)
-		self.delta_W_rnn += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa_array_rnn, axis=0)
-		self.delta_W_out += cp.mean(L_out[:,:,cp.newaxis] * self.kappa_array_out[:,cp.newaxis,:], axis=0)
-		self.delta_b_out += cp.mean(L_out[:,:,cp.newaxis], axis=0)
+		self.grad_dict['W_in']  += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa_array_inp, axis=0).T
+		self.grad_dict['W_rnn'] += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa_array_rnn, axis=0).T
+		self.grad_dict['W_out'] += cp.mean(L_out[:,:,cp.newaxis] * self.kappa_array_out[:,cp.newaxis,:], axis=0).T
+		self.grad_dict['b_out'] += cp.mean(L_out[:,:,cp.newaxis], axis=0).T
 
 
 	def LIF_recurrent_cell(self, x, z, v, a, y):
@@ -213,15 +230,12 @@ class Model:
 		# Calculate task loss
 		self.task_loss = cross_entropy(self.output_mask, self.output_data, self.y)
 
-		# Apply gradient updates
-		self.var_dict['W_in']  += par['learning_rate'] * self.delta_W_inp.T
-		self.var_dict['W_rnn'] += par['learning_rate'] * self.delta_W_rnn.T
-		self.var_dict['W_out'] += par['learning_rate'] * self.delta_W_out.T
-		self.var_dict['b_out'] += par['learning_rate'] * self.delta_b_out.T
+		# Apply gradient updates using the chosen optimizer
+		self.var_dict = self.optimizer.apply_gradients(self.grad_dict)
 
 		# Saving delta W_out and delta W_rnn
-		self.delta_W_out_hist.append(cp.sum(self.delta_W_out))
-		self.delta_W_rnn_hist.append(cp.sum(self.delta_W_rnn))
+		# self.delta_W_out_hist.append(cp.sum(self.delta_W_out))
+		# self.delta_W_rnn_hist.append(cp.sum(self.delta_W_rnn))
 
 
 	def get_weights(self):
@@ -252,29 +266,30 @@ class Model:
 
 	def visualize_delta(self,i):
 		# Plot the delta W_out and W_rnn over iterations
-		fig, ax = plt.subplots(1,2, figsize=(12,8))
-		ax[0].plot(self.delta_W_rnn_hist)
-		ax[0].set_title('delta_W_rnn')
-		ax[1].plot(self.delta_W_out_hist)
-		ax[1].set_title('delta_W_out')
+		# fig, ax = plt.subplots(1,2, figsize=(12,8))
+		# ax[0].plot(self.delta_W_rnn_hist)
+		# ax[0].set_title('delta_W_rnn')
+		# ax[1].plot(self.delta_W_out_hist)
+		# ax[1].set_title('delta_W_out')
 
-		plt.savefig('./savedir/delta_iter{}.png'.format(i), bbox_inches='tight')
-		plt.clf()
-		plt.close()
+		# plt.savefig('./savedir/delta_iter{}.png'.format(i), bbox_inches='tight')
+		# plt.clf()
+		# plt.close()
 
-		# Imshow the delta W_out and W_rnn at iteration i
+		# # Imshow the delta W_out and W_rnn at iteration i
 
-		plt.figure()
-		plt.imshow(to_cpu(self.delta_W_rnn), aspect='auto')
-		plt.colorbar()
-		plt.savefig('./savedir/delta_W_rnn_iter{}.png'.format(i), bbox_inches='tight')
-		plt.close()
+		# plt.figure()
+		# plt.imshow(to_cpu(self.delta_W_rnn), aspect='auto')
+		# plt.colorbar()
+		# plt.savefig('./savedir/delta_W_rnn_iter{}.png'.format(i), bbox_inches='tight')
+		# plt.close()
 
-		plt.figure()
-		plt.imshow(to_cpu(self.delta_W_out), aspect='auto')
-		plt.colorbar()
-		plt.savefig('./savedir/delta_W_out_iter{}.png'.format(i), bbox_inches='tight')
-		plt.close()
+		# plt.figure()
+		# plt.imshow(to_cpu(self.delta_W_out), aspect='auto')
+		# plt.colorbar()
+		# plt.savefig('./savedir/delta_W_out_iter{}.png'.format(i), bbox_inches='tight')
+		# plt.close()
+		pass
 
 
 def main():
