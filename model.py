@@ -25,7 +25,7 @@ class Model:
 		constants = [
 			'n_hidden', 'noise_rnn', 'adex', 'lif', \
 			'w_init', 'beta_neuron', 'EI_mask', \
-			'W_in_const']
+			'W_in_const', 'W_rnn_mask']
 
 		self.con_dict = {}
 		for c in constants:
@@ -48,6 +48,9 @@ class Model:
 		else:
 			self.W_rnn_effective = self.var_dict['W_rnn']
 
+		# Apply mask to the recurrent weights
+		self.W_rnn_effective *= self.con_dict['W_rnn_mask']
+		
 
 	def run_model(self, trial_info):
 		""" Run the model by:
@@ -166,6 +169,7 @@ class Model:
 		# Calculate task loss
 		self.task_loss = cross_entropy(self.output_mask, self.output_data, self.y)
 
+		# Apply gradient updates
 		self.var_dict['W_rnn'] += par['learning_rate'] * self.delta_W_rnn.T
 		self.var_dict['W_out'] += par['learning_rate'] * self.delta_W_out.T
 
