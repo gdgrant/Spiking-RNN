@@ -18,6 +18,10 @@ class Model:
 
 		self.size_ref = cp.ones([par['batch_size'],par['n_hidden']])
 
+		# For visualization of delta
+		self.delta_W_out_hist = []
+		self.delta_W_rnn_hist = []
+		self.delta_W_inp_hist = []
 
 	def init_constants(self):
 		""" Import constants from CPU to GPU """
@@ -76,14 +80,19 @@ class Model:
 		# Establish spike and output recording
 		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
-		self.z_hat = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
+		
+		x_hat = cp.zeros([par['batch_size'], par['n_input']])
+		z_hat = cp.zeros([par['batch_size'], par['n_hidden']])
 
-		epsilon_a = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
-		h         = cp.zeros([par['batch_size'], par['n_hidden']])
+		inp_epsilon_a = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
+		rnn_epsilon_a = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
+		h = cp.zeros([par['batch_size'], par['n_hidden']])
 
-		#Optimization
+		# Optimization states
+		self.kappa_array_inp = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
 		self.kappa_array_rnn = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
 		self.kappa_array_out = cp.zeros([par['batch_size'], par['n_hidden']])
+		self.delta_W_inp = cp.zeros([par['n_hidden'], par['n_input']])
 		self.delta_W_rnn = cp.zeros([par['n_hidden'], par['n_hidden']])
 		self.delta_W_out = cp.zeros([par['n_output'], par['n_hidden']])
 		self.delta_b_out = cp.zeros([par['n_output'], 1])
@@ -102,10 +111,6 @@ class Model:
 		elif par['cell_type'] == 'adex':
 			cell = self.AdEx_recurrent_cell
 
-		# For visualization of delta
-		self.delta_W_out_hist = []
-		self.delta_W_rnn_hist = []
-
 		# Loop across time
 		for t in range(par['num_time_steps']):
 
@@ -114,60 +119,86 @@ class Model:
 			latency_z = self.z[t-(1+par['latency_inds']),:,neuron_inds].T
 
 			# Run cell step
-			self.z[t,...], state, adapt, self.y[t,...], self.z_hat[t,...], epsilon_a, h = \
-				cell(self.input_data[t], latency_z, state, adapt, self.y[t-1,...], self.z_hat[t-1,...], epsilon_a)
+			self.z[t,...], state, adapt, self.y[t,...], h = \
+				cell(self.input_data[t], latency_z, state, adapt, self.y[t-1,...])
 
-			# Calculate output error
-			output_error = self.output_data[t] - softmax(self.y[t])
+			# Update eligibilities and traces
+			x_hat, z_hat, inp_epsilon_a, rnn_epsilon_a = \
+				self.update_optimization_terms(self.input_data[t], self.z[t,...], \
+					h, x_hat, z_hat, inp_epsilon_a, rnn_epsilon_a)
 
-			### Equations 4, 5, 46, 47
-			# Calculate learning signal for recurrent weights
-			L_rec = self.output_mask[t,:,cp.newaxis]*cp.sum(self.var_dict['W_out'].T[cp.newaxis,...] * output_error[...,cp.newaxis], axis=1)
+			# Update pending weight changes
+			self.calculate_weight_updates(inp_epsilon_a, rnn_epsilon_a, x_hat, z_hat, h, t)
 
-			# Calculate trace impact on learning signal for rec. weights (Eq. 47)
-			self.kappa_array_rnn *= self.con_dict['lif']['kappa']
-			self.kappa_array_rnn += h[:,:,cp.newaxis] * (self.z_hat[t-1,...][:,cp.newaxis,:] - par['lif']['beta'] * epsilon_a)
 
-			# Update recurrent weight delta
-			self.delta_W_rnn += cp.mean(L_rec[:,:,cp.newaxis] * self.kappa_array_rnn, axis=0)
+	def update_optimization_terms(self, x, z, h, x_hat, z_hat, inp_eps, rnn_eps):
 
-			### Equation 48
-			# Calculate learning signal for output weights
-			L_out = self.output_mask[t,:,cp.newaxis] * output_error
+		# Add dimension (separated for clarity)
+		h = h[...,cp.newaxis]
 
-			# Calculate output impact on learning signal for output weights
-			self.kappa_array_out *= self.con_dict['lif']['kappa']
-			self.kappa_array_out += self.z[t,...]
+		# Calculate eligibility traces (Eq. 27)
+		inp_eps = h * x_hat[:,cp.newaxis,:] + (par['lif']['rho'] - (h * par['lif']['beta'])) * inp_eps
+		rnn_eps = h * z_hat[:,cp.newaxis,:] + (par['lif']['rho'] - (h * par['lif']['beta'])) * rnn_eps
 
-			# Update output weight delta
-			self.delta_W_out += cp.mean(L_out[:,:,cp.newaxis] @ self.kappa_array_out[:,cp.newaxis,:], axis=0)
-			self.delta_b_out += cp.mean(L_out[:,:,cp.newaxis], axis=0)
+		# Update trace of pre-synaptic activity (Eq. 5)
+		x_hat = par['lif']['alpha'] * x_hat + x
+		z_hat = par['lif']['alpha'] * z_hat + z
 
-	def LIF_recurrent_cell(self, rnn_input, z, v, a, y, z_hat, epsilon_a):
+		return x_hat, z_hat, inp_eps, rnn_eps
+
+
+	def calculate_weight_updates(self, inp_epsilon_a, rnn_epsilon_a, x_hat, z_hat, h, t):
+
+		# Calculate output error
+		output_error = self.output_mask[t,:,cp.newaxis] * (self.output_data[t] - softmax(self.y[t]))
+
+		# Calculate learning signals per layer (Eq. 4)
+		L_out = output_error
+		L_hid = cp.sum(self.var_dict['W_out'].T[cp.newaxis,...] * output_error[...,cp.newaxis], axis=1)
+
+		# Increment kappa arrays forward in time (Eq. 46-48, k^(t-t') terms)
+		self.kappa_array_inp *= self.con_dict['lif']['kappa']
+		self.kappa_array_rnn *= self.con_dict['lif']['kappa']
+		self.kappa_array_out *= self.con_dict['lif']['kappa']
+
+		# Calculate trace impact on learning signal for input weights (Eq. 47)
+		self.kappa_array_inp += h[:,:,cp.newaxis] * (x_hat[:,cp.newaxis,:] - par['lif']['beta'] * inp_epsilon_a)
+
+		# Calculate trace impact on learning signal for rec. weights (Eq. 5, 47)
+		self.kappa_array_rnn += h[:,:,cp.newaxis] * (z_hat[:,cp.newaxis,:] - par['lif']['beta'] * rnn_epsilon_a)
+
+		# Calculate output impact on learning signal for output weights
+		self.kappa_array_out += self.z[t,...]
+
+		### Update pending weight changes
+		self.delta_W_inp += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa_array_inp, axis=0)
+		self.delta_W_rnn += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa_array_rnn, axis=0)
+		self.delta_W_out += cp.mean(L_out[:,:,cp.newaxis] * self.kappa_array_out[:,cp.newaxis,:], axis=0)
+		self.delta_b_out += cp.mean(L_out[:,:,cp.newaxis], axis=0)
+
+
+	def LIF_recurrent_cell(self, x, z, v, a, y):
+		""" Run one step of the leaky-integrate-and-fire model
+			x = input spikes, z = recurrent spikes, v = membrane voltage
+			a = adaptation variable, y = previous output """
 
 		# Calculate input current and get LIF cell states (Eq. 11, 25, 26)
-		I = rnn_input @ self.var_dict['W_in'] + z @ self.W_rnn_effective
+		I = x @ self.var_dict['W_in'] + z @ self.W_rnn_effective
 		v, a, z, A, v_th = run_lif(v, a, I, self.con_dict['lif'])
 
 		# Calculate output based on current cell state (Eq. 12)
 		y = self.con_dict['lif']['kappa'] * y + z @ self.var_dict['W_out'] + self.var_dict['b_out']
 
-		# Update h, the pseudo-derivative (Eq. 5, ~24)
+		# Calculate h, the pseudo-derivative (Eq. 5, ~24)
 		# Bellec et al., 2018b
 		h = par['gamma'] * cp.maximum(0., 1 - cp.abs((v-A)/v_th))
 
-		# Calculate eligibility trace (Eq. 27)
-		epsilon_a = h[:,:,cp.newaxis] @ z_hat[:,cp.newaxis,:] + (par['lif']['rho'] - (h[:,:,cp.newaxis] * par['lif']['beta'])) * epsilon_a
-
-		# Update z_hat, the trace of pre-synaptic activity
-		z_hat = par['lif']['alpha'] * z_hat + z
-
-		return z, v, a, y, z_hat, epsilon_a, h
+		return z, v, a, y, h
 
 
-	def AdEx_recurrent_cell(self, rnn_input, z, V, w, y):
+	def AdEx_recurrent_cell(self, x, z, V, w, y):
 
-		I = rnn_input @ self.var_dict['W_in'] + z @ self.W_rnn_effective
+		I = x @ self.var_dict['W_in'] + z @ self.W_rnn_effective
 		V, w, z = run_adex(V, w, I, self.con_dict['adex'])
 
 		# Calculate output based on current cell state (Eq. 12)
@@ -183,6 +214,7 @@ class Model:
 		self.task_loss = cross_entropy(self.output_mask, self.output_data, self.y)
 
 		# Apply gradient updates
+		self.var_dict['W_in']  += par['learning_rate'] * self.delta_W_inp.T
 		self.var_dict['W_rnn'] += par['learning_rate'] * self.delta_W_rnn.T
 		self.var_dict['W_out'] += par['learning_rate'] * self.delta_W_out.T
 		self.var_dict['b_out'] += par['learning_rate'] * self.delta_b_out.T
@@ -190,6 +222,7 @@ class Model:
 		# Saving delta W_out and delta W_rnn
 		self.delta_W_out_hist.append(cp.sum(self.delta_W_out))
 		self.delta_W_rnn_hist.append(cp.sum(self.delta_W_rnn))
+
 
 	def get_weights(self):
 
