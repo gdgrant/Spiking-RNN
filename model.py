@@ -94,14 +94,14 @@ class Model:
 
 		# Establish variable rules
 		self.apply_variable_rules()
-		
+
 		# Clear gradients
 		self.zero_grads()
 
 		# Establish spike and output recording
 		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
-		
+
 		x_hat = cp.zeros([par['batch_size'], par['n_input']])
 		z_hat = cp.zeros([par['batch_size'], par['n_hidden']])
 
@@ -113,7 +113,7 @@ class Model:
 		self.kappa_array_inp = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
 		self.kappa_array_rnn = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
 		self.kappa_array_out = cp.zeros([par['batch_size'], par['n_hidden']])
-		
+
 		# Initialize cell states
 		if par['cell_type'] == 'lif':
 			state = 0. * self.size_ref
@@ -182,6 +182,7 @@ class Model:
 		self.kappa_array_inp += h[:,:,cp.newaxis] * (x_hat[:,cp.newaxis,:] - par['lif']['beta'] * inp_epsilon_a)
 
 		# Calculate trace impact on learning signal for rec. weights (Eq. 5, 47)
+		# NYM: I think we need something like the ei matrix multiplied with z_hat
 		self.kappa_array_rnn += h[:,:,cp.newaxis] * (z_hat[:,cp.newaxis,:] - par['lif']['beta'] * rnn_epsilon_a)
 
 		# Calculate output impact on learning signal for output weights

@@ -20,7 +20,7 @@ def lif_membrane(v, I, z, c):
 def lif_adaptation(a, z, c):
 	""" Calculate the new threshold adaptation """
 
-	return c['rho']*a + z
+	return c['rho']*a + z * 0.25 # CHANGED
 
 def lif_spike(v, a, c):
 	""" Check potential thresholds for new spikes """
