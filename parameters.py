@@ -14,7 +14,7 @@ par = {
 	'batch_size'            : 1024,
 	'iterations'            : 1000,
 	'cell_type'             : 'lif',   # 'lif', 'adex'
-	'learning_rate'			: 0.001,
+	'learning_rate'			: 1e-4,
 
 	# Network shape
 	'num_motion_tuned'      : 24,
@@ -22,7 +22,7 @@ par = {
 	'num_rule_tuned'        : 0,
 	'num_receptive_fields'  : 1,
 	'num_motion_dirs'       : 8,
-	'n_hidden'              : 100,
+	'n_hidden'              : 150,
 	'n_output'              : 3,
 
 	# Pseudo derivative
@@ -46,14 +46,14 @@ par = {
 	'input_gamma'           : 0.008,
 	'rnn_gamma'             : 0.04,
 	'output_gamma'          : 0.08,
-	'noise_rnn_sd'          : 0.05,
+	'noise_rnn_sd'          : 0.5,
 	'noise_in_sd'           : 0.2,
 
 	# Timing constants
 	'dt'                    : 1,
 	'membrane_constant'     : 100,
 	'output_constant'       : 20,
-	'latency'				: 10,	# No latency = 1 ms
+	'latency'				: [8,12],	# No latency = None
 
 	# Task setup
 	'task'                  : 'oic',
@@ -119,6 +119,11 @@ def update_dependencies():
 	par['noise_rnn']    = np.sqrt(2*par['alpha_neuron'])*par['noise_rnn_sd']
 	par['noise_in']     = np.sqrt(2/par['alpha_neuron'])*par['noise_rnn_sd']
 
+	if par['latency'] is None:
+		par['latency_inds'] = 0
+	else:
+		par['latency_inds'] = np.random.randint(*par['latency'], size=par['n_hidden'])
+
 	### LIF spiking (max 40-50 Hz; 10-20 Hz for preferred dir)
 
 	par['W_in_const'] = np.zeros((par['n_input'], par['n_hidden']))
@@ -130,7 +135,7 @@ def update_dependencies():
 	# kappa = 15
 	# beta = 1.5
 	beta = 0.2
-	kappa = 3
+	kappa = 1.5
 	z = beta/np.exp(kappa)
 	for i in range(par['n_hidden']//2):
 		y = z * np.exp(kappa*np.cos(np.radians(U - i*((2*par['n_hidden'])/par['n_input']))))

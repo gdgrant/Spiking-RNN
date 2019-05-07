@@ -109,9 +109,13 @@ class Model:
 		# Loop across time
 		for t in range(par['num_time_steps']):
 
+			# Get the spikes from par['latency'] time steps ago
+			neuron_inds = np.arange(par['n_hidden']).astype(np.int64)
+			latency_z = self.z[t-(1+par['latency_inds']),:,neuron_inds].T
+
 			# Run cell step
 			self.z[t,...], state, adapt, self.y[t,...], self.z_hat[t,...], epsilon_a, h = \
-				cell(self.input_data[t], self.z[t-par['latency'],...], state, adapt, self.y[t-1,...], self.z_hat[t-1,...], epsilon_a)
+				cell(self.input_data[t], latency_z, state, adapt, self.y[t-1,...], self.z_hat[t-1,...], epsilon_a)
 
 			# Calculate output error
 			output_error = self.output_data[t] - softmax(self.y[t])
