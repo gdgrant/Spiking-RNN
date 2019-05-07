@@ -276,15 +276,17 @@ def main():
 		print(info_str0 + info_str1)
 
 		if i%10==0:
-			fig, ax = plt.subplots(4,1, figsize=(16,10))
+			fig, ax = plt.subplots(4,1, figsize=(16,10), sharex=True)
 			ax[0].imshow(to_cpu(model.input_data[:,0,:].T), aspect='auto')
 			ax[0].set_title('Input Data')
 			ax[1].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
 			ax[1].set_title('Spiking')
 			ax[2].plot(to_cpu(np.mean(model.z[:,0,:], axis=(1))))
 			ax[2].set_title('Trial 0 Mean Spiking')
+			ax[2].set_xlim(0,par['num_time_steps'])
 			ax[3].plot(to_cpu(np.mean(model.z, axis=(1,2))))
 			ax[3].set_title('All Trials Mean Spiking')
+			ax[3].set_xlim(0,par['num_time_steps'])
 
 			plt.savefig('./savedir/diagnostic_iter{:0>4}.png'.format(i), bbox_inches='tight')
 			plt.clf()
