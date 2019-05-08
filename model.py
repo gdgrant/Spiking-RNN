@@ -128,19 +128,7 @@ class Model:
 		# Establish spike and output recording
 		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
-		
-		# x_hat = cp.zeros([par['batch_size'], par['n_input']])
-		# z_hat = cp.zeros([par['batch_size'], par['n_hidden']])
 
-		# inp_epsilon_a = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
-		# rnn_epsilon_a = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
-		h = cp.zeros([par['batch_size'], par['n_hidden']])
-
-		# Clear optimization states
-		# self.kappa_array_inp = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
-		# self.kappa_array_rnn = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
-		# self.kappa_array_out = cp.zeros([par['batch_size'], par['n_hidden']])
-		
 		# Initialize cell states
 		if par['cell_type'] == 'lif':
 			state = 0. * self.size_ref

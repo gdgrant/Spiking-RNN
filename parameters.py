@@ -12,10 +12,10 @@ par = {
 	'optimizer'				: 'adam',
 
 	# Training environment
-	'batch_size'            : 1024,
-	'iterations'            : 1000,
+	'batch_size'            : 256,
+	'iterations'            : 100000,
 	'cell_type'             : 'lif',   # 'lif', 'adex'
-	'learning_rate'			: 1e-4,
+	'learning_rate'			: 2e-4,
 
 	# Network shape
 	'num_motion_tuned'      : 24,
@@ -23,7 +23,7 @@ par = {
 	'num_rule_tuned'        : 0,
 	'num_receptive_fields'  : 1,
 	'num_motion_dirs'       : 8,
-	'n_hidden'              : 150,
+	'n_hidden'              : 250,
 	'n_output'              : 3,
 
 	# Pseudo derivative
@@ -54,10 +54,10 @@ par = {
 	'dt'                    : 1,
 	'membrane_constant'     : 100,
 	'output_constant'       : 20,
-	'latency'				: [8,12],	# No latency = None
+	'latency'				: [5,15],	# No latency = None
 
 	# Task setup
-	'task'                  : 'oic',
+	'task'                  : 'dms',
 	'kappa'                 : 2.0,
 	'tuning_height'         : 100.0,
 	'response_multiplier'   : 1.,
@@ -65,12 +65,12 @@ par = {
 	'fixation_on'           : True,
 
 	# Task timings
-	'dead_time'             : 100,
-	'fix_time'              : 200,
-	'sample_time'           : 200,
-	'delay_time'            : 100,
-	'test_time'             : 200,
-	'mask_time'             : 40,
+	'dead_time'             : 20,
+	'fix_time'              : 50,
+	'sample_time'           : 120,
+	'delay_time'            : 120,
+	'test_time'             : 120,
+	'mask_time'             : 30,
 }
 
 
