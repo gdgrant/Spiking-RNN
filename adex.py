@@ -8,9 +8,9 @@ def run_adex(V, w, I, constants):
 
 	I = I/constants['current_divider']
 
-	V_next, v_th = adex_membrane(V, w, I, constants)
-	w_next       = adex_adaptation(V, w, constants)
-	V, w, spike  = adex_spike(V_next, w_next, constants)
+	V_next            = adex_membrane(V, w, I, constants)
+	w_next            = adex_adaptation(V, w, constants)
+	V, w, spike, v_th = adex_spike(V_next, w_next, constants)
 
 	return V, w, spike, v_th
 

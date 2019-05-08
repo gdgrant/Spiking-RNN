@@ -156,6 +156,7 @@ class Model:
 			self.z[t,...], state, adapt, self.y[t,...], h = \
 				cell(self.input_data[t], latency_z, state, adapt, self.y[t-1,...])
 
+			quit()
 			# Update eligibilities and traces
 			epsi(self.input_data[t], self.z[t,...], h, t)
 
@@ -189,6 +190,11 @@ class Model:
 
 		# Calculate output impact on learning signal for output weights
 		self.kappa['out'] += self.z[t,...]
+
+
+	def AdEx_update_eligibility(self, x, z, h, t):
+
+		pass
 
 
 	def calculate_weight_updates(self, t):
@@ -237,9 +243,9 @@ class Model:
 
 		# Calculate h, the pseudo-derivative (Eq. 5, ~24, 20/21)
 		# Bellec et al., 2018b
-		h = par['gamma'] * cp.maximum(0., 1 - cp.abs((v-v_th)/v_th))
+		h = par['gamma'] * cp.maximum(0., 1 - cp.abs((V-v_th)/v_th))
 
-		return z, V, w, y
+		return z, V, w, y, h
 
 
 	def optimize(self):
