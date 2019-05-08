@@ -8,11 +8,11 @@ def run_adex(V, w, I, constants):
 
 	I = I/constants['current_divider']
 
-	V_next      = adex_membrane(V, w, I, constants)
-	w_next      = adex_adaptation(V, w, constants)
-	V, w, spike = adex_spike(V_next, w_next, constants)
+	V_next, v_th = adex_membrane(V, w, I, constants)
+	w_next       = adex_adaptation(V, w, constants)
+	V, w, spike  = adex_spike(V_next, w_next, constants)
 
-	return V, w, spike
+	return V, w, spike, v_th
 
 def adex_membrane(V, w, I, c):
 	""" Calculate the new membrane potential """
@@ -33,8 +33,9 @@ def adex_spike(V, w, c):
 
 	# Spike projects 0mV or 1 mV (nothing or unit value) to the network
 	# with the current parameters
-	spike = V > c['Vth']
+	v_th = c['Vth']
+	spike = V > v_th
 	V = cp.where(spike, c['V_r'], V)
 	w = cp.where(spike, w + c['b'], w)
 
-	return V, w, spike
+	return V, w, spike, v_th
