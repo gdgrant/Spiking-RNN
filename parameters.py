@@ -30,7 +30,7 @@ par = {
 	'gamma'					: 0.3,
 
 	# EI setup
-	'EI_prop'               : 0.8,
+	'EI_prop'               : 1.,
 	'balance_EI'            : True,
 
 	# AdEx parameters
@@ -98,11 +98,14 @@ def update_dependencies():
 
 	par['W_in_init']	= np.random.gamma(par['input_gamma'],  scale=1.0, size=[par['n_input'],  par['n_hidden']])
 	par['W_out_init']	= np.random.gamma(par['output_gamma'], scale=1.0, size=[par['n_hidden'], par['n_output']])
-	par['W_rnn_init']	= np.random.gamma(par['rnn_gamma'],    scale=1.0, size=[par['n_hidden'], par['n_hidden']])
 
-	if par['balance_EI']:
-		par['W_rnn_init'][par['n_EI']:,:par['n_EI']] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=par['W_rnn_init'][par['n_EI']:,:par['n_EI']].shape)
-		par['W_rnn_init'][:par['n_EI'],par['n_EI']:] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=par['W_rnn_init'][:par['n_EI'],par['n_EI']:].shape)
+	if par['EI_prop'] == 1.:
+		par['W_rnn_init'] = np.random.uniform(-par['rnn_gamma'], par['rnn_gamma'], size=[par['n_hidden'],par['n_hidden']])
+	else:
+		par['W_rnn_init']	= np.random.gamma(par['rnn_gamma'],    scale=1.0, size=[par['n_hidden'], par['n_hidden']])
+		if par['balance_EI']:
+			par['W_rnn_init'][par['n_EI']:,:par['n_EI']] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=par['W_rnn_init'][par['n_EI']:,:par['n_EI']].shape)
+			par['W_rnn_init'][:par['n_EI'],par['n_EI']:] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=par['W_rnn_init'][:par['n_EI'],par['n_EI']:].shape)
 
 	par['b_rnn_init']   = np.zeros([1, par['n_hidden']])
 	par['b_out_init']   = np.zeros([1, par['n_output']])
