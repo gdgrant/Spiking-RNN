@@ -16,6 +16,7 @@ class Model:
 
 		self.init_constants()
 		self.init_variables()
+		self.init_eligibility()
 
 		self.size_ref = cp.ones([par['batch_size'],par['n_hidden']])
 
@@ -58,12 +59,38 @@ class Model:
 			self.var_dict[v]  = to_gpu(par[v+'_init'])
 			self.grad_dict[v] = cp.zeros_like(self.var_dict[v])
 
-	def zero_grads(self):
-		""" Set all gradient arrays to zero """
+
+	def init_eligibility(self):
+		""" Make eligibility trace variables """
+
+		self.eps_v = {}
+		self.eps_a = {}
+		self.kappa = {}
+
+		self.eps_v['inp'] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
+		self.eps_v['rec'] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
+
+		self.eps_a['inp'] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
+		self.eps_a['rec'] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
+
+		self.kappa['inp'] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
+		self.kappa['rec'] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
+		self.kappa['out'] = cp.zeros([par['batch_size'], par['n_hidden']])
+
+
+	def zero_state(self):
+		""" Set all gradient and epsilon arrays to zero """
 
 		for v in self.var_names:
-			self.grad_dict[v] = cp.zeros_like(self.var_dict[v])
+			self.grad_dict[v] = cp.zeros_like(self.grad_dict[v])
 
+		for v in self.eps_v.keys():
+			self.eps_v[v] = cp.zeros_like(self.eps_v[v])
+			self.eps_a[v] = cp.zeros_like(self.eps_a[v])
+
+		for k in self.kappa.keys():
+			self.kappa[k] = cp.zeros_like(self.kappa[k])
+			
 
 	def apply_variable_rules(self):
 		""" Apply rules to the variables that must be applied every
@@ -95,24 +122,24 @@ class Model:
 		# Establish variable rules
 		self.apply_variable_rules()
 		
-		# Clear gradients
-		self.zero_grads()
+		# Clear gradients and epsilons
+		self.zero_state()
 
 		# Establish spike and output recording
 		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
 		
-		x_hat = cp.zeros([par['batch_size'], par['n_input']])
-		z_hat = cp.zeros([par['batch_size'], par['n_hidden']])
+		# x_hat = cp.zeros([par['batch_size'], par['n_input']])
+		# z_hat = cp.zeros([par['batch_size'], par['n_hidden']])
 
-		inp_epsilon_a = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
-		rnn_epsilon_a = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
+		# inp_epsilon_a = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
+		# rnn_epsilon_a = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
 		h = cp.zeros([par['batch_size'], par['n_hidden']])
 
 		# Clear optimization states
-		self.kappa_array_inp = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
-		self.kappa_array_rnn = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
-		self.kappa_array_out = cp.zeros([par['batch_size'], par['n_hidden']])
+		# self.kappa_array_inp = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
+		# self.kappa_array_rnn = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
+		# self.kappa_array_out = cp.zeros([par['batch_size'], par['n_hidden']])
 		
 		# Initialize cell states
 		if par['cell_type'] == 'lif':
@@ -125,8 +152,10 @@ class Model:
 		# Set cell type
 		if par['cell_type'] == 'lif':
 			cell = self.LIF_recurrent_cell
+			epsi = self.LIF_update_eligibility
 		elif par['cell_type'] == 'adex':
 			cell = self.AdEx_recurrent_cell
+			epsi = self.AdEx_update_eligibility
 
 		# Loop across time
 		for t in range(par['num_time_steps']):
@@ -140,57 +169,53 @@ class Model:
 				cell(self.input_data[t], latency_z, state, adapt, self.y[t-1,...])
 
 			# Update eligibilities and traces
-			x_hat, z_hat, inp_epsilon_a, rnn_epsilon_a = \
-				self.update_optimization_terms(self.input_data[t], self.z[t,...], \
-					h, x_hat, z_hat, inp_epsilon_a, rnn_epsilon_a)
+			epsi(self.input_data[t], self.z[t,...], h, t)
 
 			# Update pending weight changes
-			self.calculate_weight_updates(inp_epsilon_a, rnn_epsilon_a, x_hat, z_hat, h, t)
+			self.calculate_weight_updates(t)
 
 
-	def update_optimization_terms(self, x, z, h, x_hat, z_hat, inp_eps, rnn_eps):
+	def LIF_update_eligibility(self, x, z, h, t):
 
 		# Add dimension (separated for clarity)
 		h = h[...,cp.newaxis]
 
+		### Update epsilons
 		# Calculate eligibility traces (Eq. 27)
-		inp_eps = h * x_hat[:,cp.newaxis,:] + (par['lif']['rho'] - (h * par['lif']['beta'])) * inp_eps
-		rnn_eps = h * z_hat[:,cp.newaxis,:] + (par['lif']['rho'] - (h * par['lif']['beta'])) * rnn_eps
+		self.eps_a['inp'] = h * self.eps_v['inp'] + (par['lif']['rho'] - (h * par['lif']['beta'])) * self.eps_a['inp']
+		self.eps_a['rec'] = h * self.eps_v['rec'] + (par['lif']['rho'] - (h * par['lif']['beta'])) * self.eps_a['rec']
 
-		# Update trace of pre-synaptic activity (Eq. 5)
-		x_hat = par['lif']['alpha'] * x_hat + x
-		z_hat = par['lif']['alpha'] * z_hat + z
+		# Update trace of pre-synaptic activity [AKA x_hat and z_hat] (Eq. 5)
+		self.eps_v['inp'] = par['lif']['alpha'] * self.eps_v['inp'] + x[:,cp.newaxis,:]
+		self.eps_v['rec'] = par['lif']['alpha'] * self.eps_v['rec'] + z[:,:,cp.newaxis]
 
-		return x_hat, z_hat, inp_eps, rnn_eps
+		### Update and modulate e's
+		# Increment kappa arrays forward in time (Eq. 46-48, k^(t-t') terms)
+		self.kappa['inp'] *= self.con_dict['lif']['kappa']
+		self.kappa['rec'] *= self.con_dict['lif']['kappa']
+		self.kappa['out'] *= self.con_dict['lif']['kappa']
+
+		# Calculate trace impact on learning signal for input and recurrent weights (Eq. 5, 28, 47)
+		self.kappa['inp'] += h * (self.eps_v['inp'] - par['lif']['beta'] * self.eps_a['inp'])
+		self.kappa['rec'] += h * (self.eps_v['rec'] - par['lif']['beta'] * self.eps_a['rec'])
+
+		# Calculate output impact on learning signal for output weights
+		self.kappa['out'] += self.z[t,...]
 
 
-	def calculate_weight_updates(self, inp_epsilon_a, rnn_epsilon_a, x_hat, z_hat, h, t):
+	def calculate_weight_updates(self, t):
 
 		# Calculate output error
 		output_error = self.output_mask[t,:,cp.newaxis] * (self.output_data[t] - softmax(self.y[t]))
 
 		# Calculate learning signals per layer (Eq. 4)
-		L_out = output_error
 		L_hid = cp.sum(self.var_dict['W_out'].T[cp.newaxis,...] * output_error[...,cp.newaxis], axis=1)
-
-		# Increment kappa arrays forward in time (Eq. 46-48, k^(t-t') terms)
-		self.kappa_array_inp *= self.con_dict['lif']['kappa']
-		self.kappa_array_rnn *= self.con_dict['lif']['kappa']
-		self.kappa_array_out *= self.con_dict['lif']['kappa']
-
-		# Calculate trace impact on learning signal for input weights (Eq. 47)
-		self.kappa_array_inp += h[:,:,cp.newaxis] * (x_hat[:,cp.newaxis,:] - par['lif']['beta'] * inp_epsilon_a)
-
-		# Calculate trace impact on learning signal for rec. weights (Eq. 5, 47)
-		self.kappa_array_rnn += h[:,:,cp.newaxis] * (z_hat[:,cp.newaxis,:] - par['lif']['beta'] * rnn_epsilon_a)
-
-		# Calculate output impact on learning signal for output weights
-		self.kappa_array_out += self.z[t,...]
+		L_out = output_error
 
 		### Update pending weight changes
-		self.grad_dict['W_in']  += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa_array_inp, axis=0).T
-		self.grad_dict['W_rnn'] += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa_array_rnn, axis=0).T
-		self.grad_dict['W_out'] += cp.mean(L_out[:,:,cp.newaxis] * self.kappa_array_out[:,cp.newaxis,:], axis=0).T
+		self.grad_dict['W_in']  += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa['inp'], axis=0).T
+		self.grad_dict['W_rnn'] += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa['rec'], axis=0).T
+		self.grad_dict['W_out'] += cp.mean(L_out[:,:,cp.newaxis] * self.kappa['out'][:,cp.newaxis,:], axis=0).T
 		self.grad_dict['b_out'] += cp.mean(L_out[:,:,cp.newaxis], axis=0).T
 
 
@@ -203,10 +228,10 @@ class Model:
 		I = x @ self.var_dict['W_in'] + z @ self.W_rnn_effective
 		v, a, z, A, v_th = run_lif(v, a, I, self.con_dict['lif'])
 
-		# Calculate output based on current cell state (Eq. 12)
+		# Calculate output based on current cell state (Eq. 12, 20, 21)
 		y = self.con_dict['lif']['kappa'] * y + z @ self.var_dict['W_out'] + self.var_dict['b_out']
 
-		# Calculate h, the pseudo-derivative (Eq. 5, ~24)
+		# Calculate h, the pseudo-derivative (Eq. 5, ~24, 25/26)
 		# Bellec et al., 2018b
 		h = par['gamma'] * cp.maximum(0., 1 - cp.abs((v-A)/v_th))
 
@@ -215,11 +240,16 @@ class Model:
 
 	def AdEx_recurrent_cell(self, x, z, V, w, y):
 
+		# Calculate input current and get AdEx cell states
 		I = x @ self.var_dict['W_in'] + z @ self.W_rnn_effective
-		V, w, z = run_adex(V, w, I, self.con_dict['adex'])
+		V, w, z, v_th = run_adex(V, w, I, self.con_dict['adex'])
 
 		# Calculate output based on current cell state (Eq. 12)
 		y = self.con_dict['lif']['kappa'] * y + z @ self.var_dict['W_out'] + self.var_dict['b_out']
+
+		# Calculate h, the pseudo-derivative (Eq. 5, ~24, 20/21)
+		# Bellec et al., 2018b
+		h = par['gamma'] * cp.maximum(0., 1 - cp.abs((v-v_th)/v_th))
 
 		return z, V, w, y
 
