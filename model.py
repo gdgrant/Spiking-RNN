@@ -156,7 +156,6 @@ class Model:
 			self.z[t,...], state, adapt, self.y[t,...], h = \
 				cell(self.input_data[t], latency_z, state, adapt, self.y[t-1,...])
 
-			quit()
 			# Update eligibilities and traces
 			epsi(self.input_data[t], self.z[t,...], h, t)
 
@@ -169,24 +168,33 @@ class Model:
 		# Add dimension (separated for clarity)
 		h = h[...,cp.newaxis]
 
-		### Update epsilons
-		# Calculate eligibility traces (Eq. 27)
-		self.eps_a['inp'] = h * self.eps_v['inp'] + (par['lif']['rho'] - (h * par['lif']['beta'])) * self.eps_a['inp']
-		self.eps_a['rec'] = h * self.eps_v['rec'] + (par['lif']['rho'] - (h * par['lif']['beta'])) * self.eps_a['rec']
+		# Make constant dictionary a shorter variable for readability
+		c = self.con_dict['lif']
 
+		### Update epsilons
 		# Update trace of pre-synaptic activity [AKA x_hat and z_hat] (Eq. 5)
-		self.eps_v['inp'] = par['lif']['alpha'] * self.eps_v['inp'] + x[:,cp.newaxis,:]
-		self.eps_v['rec'] = par['lif']['alpha'] * self.eps_v['rec'] + z[:,:,cp.newaxis]
+		eps_v_inp_plc = c['alpha'] * self.eps_v['inp'] + x[:,cp.newaxis,:]
+		eps_v_rec_plc = c['alpha'] * self.eps_v['rec'] + z[:,:,cp.newaxis]
+
+		# Calculate eligibility traces (Eq. 27)
+		eps_a_inp_plc = h * self.eps_v['inp'] + (c['rho'] - (h * c['beta'])) * self.eps_a['inp']
+		eps_a_rec_plc = h * self.eps_v['rec'] + (c['rho'] - (h * c['beta'])) * self.eps_a['rec']
+
+		# Apply epsilon updates
+		self.eps_v['inp'] = eps_v_inp_plc
+		self.eps_v['rec'] = eps_v_rec_plc
+		self.eps_a['inp'] = eps_a_inp_plc
+		self.eps_a['rec'] = eps_a_rec_plc
 
 		### Update and modulate e's
 		# Increment kappa arrays forward in time (Eq. 46-48, k^(t-t') terms)
-		self.kappa['inp'] *= self.con_dict['lif']['kappa']
-		self.kappa['rec'] *= self.con_dict['lif']['kappa']
-		self.kappa['out'] *= self.con_dict['lif']['kappa']
+		self.kappa['inp'] *= c['lif']['kappa']
+		self.kappa['rec'] *= c['lif']['kappa']
+		self.kappa['out'] *= c['lif']['kappa']
 
 		# Calculate trace impact on learning signal for input and recurrent weights (Eq. 5, 28, 47)
-		self.kappa['inp'] += h * (self.eps_v['inp'] - par['lif']['beta'] * self.eps_a['inp'])
-		self.kappa['rec'] += h * (self.eps_v['rec'] - par['lif']['beta'] * self.eps_a['rec'])
+		self.kappa['inp'] += h * (self.eps_v['inp'] - c['beta'] * self.eps_a['inp'])
+		self.kappa['rec'] += h * (self.eps_v['rec'] - c['beta'] * self.eps_a['rec'])
 
 		# Calculate output impact on learning signal for output weights
 		self.kappa['out'] += self.z[t,...]
@@ -194,7 +202,14 @@ class Model:
 
 	def AdEx_update_eligibility(self, x, z, h, t):
 
-		pass
+		# Add dimension (separated for clarity)
+		h = h[...,cp.newaxis]
+
+		# Make constant dictionary a shorter variable for readability
+		c = self.con_dict['adex']
+
+		### Update epsilons
+		self.eps_a['inp'] = 
 
 
 	def calculate_weight_updates(self, t):
