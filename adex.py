@@ -1,6 +1,5 @@
 from utils import *
 
-
 ### Adaptive-Exponential spiking model
 
 def run_adex(V, w, I, constants):

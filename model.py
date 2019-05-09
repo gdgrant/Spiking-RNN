@@ -38,9 +38,8 @@ class Model:
 		""" Import constants from CPU to GPU """
 
 		constants = [
-			'n_hidden', 'noise_rnn', 'adex', 'lif', \
-			'w_init', 'beta_neuron', 'EI_mask', \
-			'W_in_const', 'W_rnn_mask']
+			'n_hidden', 'noise_rnn', 'adex', 'lif', 'W_in_mask', \
+			'w_init', 'beta_neuron', 'EI_vector', 'EI_mask', 'W_rnn_mask']
 
 		self.con_dict = {}
 		for c in constants:
@@ -104,6 +103,7 @@ class Model:
 
 		# Apply mask to the recurrent weights
 		self.W_rnn_effective *= self.con_dict['W_rnn_mask']
+		self.var_dict['W_in'] *= self.con_dict['W_in_mask']
 
 
 	def run_model(self, trial_info):
@@ -157,13 +157,13 @@ class Model:
 				cell(self.input_data[t], latency_z, state, adapt, self.y[t-1,...])
 
 			# Update eligibilities and traces
-			epsi(self.input_data[t], self.z[t,...], h, t)
+			epsi(self.input_data[t], state, self.z[t,...], self.z[t-1,...], h, t)
 
 			# Update pending weight changes
 			self.calculate_weight_updates(t)
 
 
-	def LIF_update_eligibility(self, x, z, h, t):
+	def LIF_update_eligibility(self, x, v, z, z_prev, h, t):
 
 		# Add dimension (separated for clarity)
 		h = h[...,cp.newaxis]
@@ -188,9 +188,9 @@ class Model:
 
 		### Update and modulate e's
 		# Increment kappa arrays forward in time (Eq. 46-48, k^(t-t') terms)
-		self.kappa['inp'] *= c['lif']['kappa']
-		self.kappa['rec'] *= c['lif']['kappa']
-		self.kappa['out'] *= c['lif']['kappa']
+		self.kappa['inp'] *= c['kappa']
+		self.kappa['rec'] *= c['kappa']
+		self.kappa['out'] *= c['kappa']
 
 		# Calculate trace impact on learning signal for input and recurrent weights (Eq. 5, 28, 47)
 		self.kappa['inp'] += h * (self.eps_v['inp'] - c['beta'] * self.eps_a['inp'])
@@ -200,16 +200,72 @@ class Model:
 		self.kappa['out'] += self.z[t,...]
 
 
-	def AdEx_update_eligibility(self, x, z, h, t):
+	def AdEx_update_eligibility(self, x, v, z, z_prev, h, t):
 
 		# Add dimension (separated for clarity)
 		h = h[...,cp.newaxis]
+		v = v[...,cp.newaxis]
 
 		# Make constant dictionary a shorter variable for readability
 		c = self.con_dict['adex']
 
+		# Predetermine groups of constants for readability
+		s = np.s_[:,:,cp.newaxis]	# Indexing tuple
+		C_over_dt     = c['C'][s]/c['dt']
+		dt_over_tau   = c['dt']/c['tau'][s]
+		dt_a_over_tau = c['dt']*c['a'][s]/c['tau'][s]
+
+		# Make updates to the usual model
+		v = cp.minimum(-40e-3, v)
+		beta = 1. #(c['dt']/c['C'])
+
 		### Update epsilons
-		self.eps_a['inp'] = 
+		# Update trace of pre-synaptic activity [AKA x_hat and z_hat] (Eq. 5)
+		eps_v_inp_plc = beta*(1-z[:,:,cp.newaxis])*(
+				  self.eps_v['inp']*(C_over_dt + c['g'][s]*(cp.exp((v-c['V_T'][s])/c['D'][s])-1))
+				- self.eps_a['inp'] + x[:,cp.newaxis,:])
+		eps_v_rec_plc = beta*(1-z[:,:,cp.newaxis])*(
+				  self.eps_v['rec']*(C_over_dt + c['g'][s]*(cp.exp((v-c['V_T'][s])/c['D'][s])-1))
+				- self.eps_a['rec'] + z_prev[:,cp.newaxis,:]*self.con_dict['EI_vector'][cp.newaxis,cp.newaxis,:])
+
+		# Calculate eligibility traces (Eq. 27)
+		eps_a_inp_plc = \
+				  self.eps_v['inp']*(dt_a_over_tau + h*c['b'][s]) \
+				+ self.eps_a['inp']*(1-dt_over_tau)
+		eps_a_rec_plc = \
+				  self.eps_v['rec']*(dt_a_over_tau + h*c['b'][s]) \
+				+ self.eps_a['rec']*(1-dt_over_tau)
+
+		# Apply epsilon updates
+		self.eps_v['inp'] = eps_v_inp_plc
+		self.eps_v['rec'] = eps_v_rec_plc
+		self.eps_a['inp'] = eps_a_inp_plc
+		self.eps_a['rec'] = eps_a_rec_plc
+
+		### Update and modulate e's
+		# Increment kappa arrays forward in time (Eq. 46-48, k^(t-t') terms)
+		self.kappa['inp'] *= self.con_dict['adex']['kappa']
+		self.kappa['rec'] *= self.con_dict['adex']['kappa']
+		self.kappa['out'] *= self.con_dict['adex']['kappa']
+
+		# Calculate trace impact on learning signal for input and recurrent weights (Eq. 5, 28, 47)
+		self.kappa['inp'] += h * self.eps_v['inp']
+		self.kappa['rec'] += h * self.eps_v['rec']
+
+		# Calculate output impact on learning signal for output weights
+		self.kappa['out'] += self.z[t,...]
+
+		if False:
+			print(t,
+				'| |', cp.mean(eps_v_rec_plc).astype(cp.int64),
+				'| |', cp.mean(v),
+				'| |', cp.mean(cp.exp((v-c['V_T'])/c['D'])-1),
+				'| |', cp.mean(-self.eps_a['inp']).astype(cp.int64),
+				'| |', cp.mean(z_prev[:,cp.newaxis,:]))
+			# print(t,
+			# 	'| |', cp.mean(eps_a_rec_plc).astype(cp.int64),
+			# 	'| |', cp.mean(self.eps_v['rec']).astype(cp.int64),
+			# 	'| |', cp.mean(self.eps_a['rec']).astype(cp.int64))
 
 
 	def calculate_weight_updates(self, t):
@@ -218,8 +274,15 @@ class Model:
 		output_error = self.output_mask[t,:,cp.newaxis] * (self.output_data[t] - softmax(self.y[t]))
 
 		# Calculate learning signals per layer (Eq. 4)
-		L_hid = cp.sum(self.var_dict['W_out'].T[cp.newaxis,...] * output_error[...,cp.newaxis], axis=1)
+		L_hid = cp.sum(self.var_dict['W_out'].T[cp.newaxis,...] * output_error[...,cp.newaxis], axis=1) \
+			- 0.01*cp.mean(self.z[t], axis=[1], keepdims=True)
 		L_out = output_error
+
+		# z_prev[:,cp.newaxis,:]*self.con_dict['EI_vector'][cp.newaxis,cp.newaxis,:]
+		# z_err = cp.mean(self.z[t])
+		# print(cp.mean(self.z[t], axis=[1], keepdims=True).shape)
+		# print(L_hid.shape)
+		# quit()
 
 		### Update pending weight changes
 		self.grad_dict['W_in']  += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa['inp'], axis=0).T
@@ -254,11 +317,12 @@ class Model:
 		V, w, z, v_th = run_adex(V, w, I, self.con_dict['adex'])
 
 		# Calculate output based on current cell state (Eq. 12)
-		y = self.con_dict['lif']['kappa'] * y + z @ self.var_dict['W_out'] + self.var_dict['b_out']
+		y = self.con_dict['adex']['kappa'] * y + z @ self.var_dict['W_out'] + self.var_dict['b_out']
 
 		# Calculate h, the pseudo-derivative (Eq. 5, ~24, 20/21)
 		# Bellec et al., 2018b
-		h = par['gamma'] * cp.maximum(0., 1 - cp.abs((V-v_th)/v_th))
+		# h = par['gamma'] * cp.maximum(0., 1 - cp.abs((V-v_th)/v_th))
+		h = par['gamma'] * cp.maximum(0., 1 - cp.abs((V-self.con_dict['adex']['V_T'])/10e-3))
 
 		return z, V, w, y, h
 
@@ -271,10 +335,6 @@ class Model:
 
 		# Apply gradient updates using the chosen optimizer
 		self.var_dict = self.optimizer.apply_gradients(self.grad_dict)
-
-		# Saving delta W_out and delta W_rnn
-		# self.delta_W_out_hist.append(cp.sum(self.delta_W_out))
-		# self.delta_W_rnn_hist.append(cp.sum(self.delta_W_rnn))
 
 
 	def get_weights(self):
@@ -304,31 +364,14 @@ class Model:
 
 
 	def visualize_delta(self,i):
-		# Plot the delta W_out and W_rnn over iterations
-		# fig, ax = plt.subplots(1,2, figsize=(12,8))
-		# ax[0].plot(self.delta_W_rnn_hist)
-		# ax[0].set_title('delta_W_rnn')
-		# ax[1].plot(self.delta_W_out_hist)
-		# ax[1].set_title('delta_W_out')
 
-		# plt.savefig('./savedir/delta_iter{}.png'.format(i), bbox_inches='tight')
-		# plt.clf()
-		# plt.close()
-
-		# # Imshow the delta W_out and W_rnn at iteration i
-
-		# plt.figure()
-		# plt.imshow(to_cpu(self.delta_W_rnn), aspect='auto')
-		# plt.colorbar()
-		# plt.savefig('./savedir/delta_W_rnn_iter{}.png'.format(i), bbox_inches='tight')
-		# plt.close()
-
-		# plt.figure()
-		# plt.imshow(to_cpu(self.delta_W_out), aspect='auto')
-		# plt.colorbar()
-		# plt.savefig('./savedir/delta_W_out_iter{}.png'.format(i), bbox_inches='tight')
-		# plt.close()
-		pass
+		for n in self.grad_dict.keys():
+			plt.imshow(to_cpu(self.grad_dict[n]), aspect='auto')
+			plt.colorbar()
+			plt.title(n + ' Gradient')
+			plt.savefig('./savedir/delta_{}_iter{}.png'.format(n, i), bbox_inches='tight')
+			plt.clf()
+			plt.close()
 
 
 def main():
@@ -368,12 +411,17 @@ def main():
 			ax[0].set_title('Input Data')
 			ax[1].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
 			ax[1].set_title('Spiking')
-			ax[2].plot(to_cpu(np.mean(model.z[:,0,:], axis=(1))))
+			ax[2].plot(1000.*to_cpu(np.mean(model.z[:,0,:], axis=(1))))
 			ax[2].set_title('Trial 0 Mean Spiking')
 			ax[2].set_xlim(0,par['num_time_steps'])
-			ax[3].plot(to_cpu(np.mean(model.z, axis=(1,2))))
+			ax[3].plot(1000.*to_cpu(np.mean(model.z, axis=(1,2))))
 			ax[3].set_title('All Trials Mean Spiking')
 			ax[3].set_xlim(0,par['num_time_steps'])
+
+			ax[0].set_ylabel('Input Neuron')
+			ax[1].set_ylabel('Hidden Neuron')
+			ax[2].set_ylabel('Hz')
+			ax[3].set_ylabel('Hz')
 
 			plt.savefig('./savedir/diagnostic_iter{:0>4}.png'.format(i), bbox_inches='tight')
 			plt.clf()

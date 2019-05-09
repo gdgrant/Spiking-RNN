@@ -43,7 +43,7 @@ def softmax(x, a=-1):
 def apply_EI(var, ei):
 	""" Applies EI masking to a square variable, according to the given
 		excitatory/inhibitory mask """
-	return cp.matmul(relu(var), ei)
+	return cp.matmul(ei, relu(var))
 
 def synaptic_plasticity(h, syn_x, syn_u, constants, use_stp, hidden_size):
 	""" If required, applies STP updates to the hidden state and STP
