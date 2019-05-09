@@ -26,7 +26,7 @@ class Stimulus:
 
 	def make_spiking(self, trial_info):
 
-		do_plots = True
+		do_plots = False
 
 		if do_plots:
 			import matplotlib.pyplot as plt
