@@ -11,6 +11,8 @@ class Stimulus:
 
 		if par['task'] == 'dms':
 			trial_info = self.dms()
+		elif par['task'] == 'dmc':
+			trial_info = self.dmc()
 		elif par['task'] == 'oic':
 			trial_info = self.oic()
 		else:
@@ -24,7 +26,7 @@ class Stimulus:
 
 	def make_spiking(self, trial_info):
 
-		do_plots = False
+		do_plots = True
 
 		if do_plots:
 			import matplotlib.pyplot as plt
@@ -79,6 +81,49 @@ class Stimulus:
 		test_direction = np.where(match, sample_direction, test_direction)
 		match = np.where(test_direction==sample_direction, True, match)
 		
+		if par['fixation_on']:
+			trial_info['neural_input'][:end_delay_time,:,par['num_motion_tuned']:par['num_motion_tuned']+par['num_fix_tuned']] += self.fix_tuning[np.newaxis,:,0]
+
+		output_neuron = np.where(match, 1, 2)
+		trial_info['desired_output'][:end_delay_time,:,0] = 1.
+		trial_info['desired_output'][end_delay_time:end_test_time,np.arange(par['batch_size']),output_neuron] = 1.
+
+		trial_info['neural_input'][end_fix_time:end_sample_time,np.arange(par['batch_size']),:par['num_motion_tuned']] \
+			+= np.transpose(self.motion_tuning[np.newaxis,:,0,sample_direction[np.arange(par['batch_size'])]], [0,2,1])
+
+		trial_info['neural_input'][end_delay_time:end_test_time,np.arange(par['batch_size']),:par['num_motion_tuned']] \
+			+= np.transpose(self.motion_tuning[np.newaxis,:,0,test_direction], [0,2,1])
+
+		return trial_info
+
+
+	def dmc(self):
+
+		trial_info = {
+			'neural_input'      : np.random.normal(0., par['noise_in'], size=[par['num_time_steps'], par['batch_size'], par['n_input']]),
+			'desired_output'    : np.zeros([par['num_time_steps'], par['batch_size'], par['n_output']]),
+			'train_mask'        : np.ones([par['num_time_steps'], par['batch_size']])
+		}
+
+		end_dead_time       = par['dead_time']//par['dt']
+		end_fix_time        = end_dead_time + par['fix_time']//par['dt']
+		end_sample_time     = end_fix_time + par['sample_time']//par['dt']
+		end_delay_time      = end_sample_time + par['delay_time']//par['dt']
+		end_mask_time       = end_delay_time + par['mask_time']//par['dt']
+		end_test_time       = end_delay_time + par['test_time']//par['dt']
+
+		trial_info['train_mask'][:end_dead_time,...] = 0.
+		trial_info['train_mask'][end_delay_time:end_mask_time,...] = 0.
+		trial_info['train_mask'][end_mask_time:end_test_time,...] = par['response_multiplier']
+
+		sample_direction = np.random.choice(par['num_motion_dirs'], size=par['batch_size'])
+		test_direction   = np.random.choice(par['num_motion_dirs'], size=par['batch_size'])
+
+		sample_category  = sample_direction//int(par['num_motion_dirs']/2)
+		test_category    = test_direction//int(par['num_motion_dirs']/2)
+
+		match = sample_category == test_category
+
 		if par['fixation_on']:
 			trial_info['neural_input'][:end_delay_time,:,par['num_motion_tuned']:par['num_motion_tuned']+par['num_fix_tuned']] += self.fix_tuning[np.newaxis,:,0]
 
