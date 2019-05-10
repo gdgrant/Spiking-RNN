@@ -64,6 +64,7 @@ class Model:
 
 		self.eps_v = {}
 		self.eps_a = {}
+		self.eps_u = {}
 		self.kappa = {}
 
 		self.eps_v['inp'] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
@@ -71,6 +72,9 @@ class Model:
 
 		self.eps_a['inp'] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
 		self.eps_a['rec'] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
+
+		self.eps_u['inp'] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
+		self.eps_u['rec'] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
 
 		self.kappa['inp'] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
 		self.kappa['rec'] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
@@ -86,6 +90,7 @@ class Model:
 		for v in self.eps_v.keys():
 			self.eps_v[v] = cp.zeros_like(self.eps_v[v])
 			self.eps_a[v] = cp.zeros_like(self.eps_a[v])
+			self.eps_u[v] = cp.zeros_like(self.eps_a[v])
 
 		for k in self.kappa.keys():
 			self.kappa[k] = cp.zeros_like(self.kappa[k])
@@ -95,6 +100,9 @@ class Model:
 		""" Apply rules to the variables that must be applied every
 			time the model is run """
 
+		self.var_dict['W_rnn'] = cp.minimum(par['rnn_cap'], self.var_dict['W_rnn'])
+		self.var_dict['W_in']  = cp.minimum(2*par['rnn_cap'], self.var_dict['W_in'])
+
 		# Apply EI mask
 		if par['EI_prop'] != 1.:
 			self.W_rnn_effective = apply_EI(self.var_dict['W_rnn'], self.con_dict['EI_mask'])
@@ -103,7 +111,8 @@ class Model:
 
 		# Apply mask to the recurrent weights
 		self.W_rnn_effective *= self.con_dict['W_rnn_mask']
-		self.var_dict['W_in'] *= self.con_dict['W_in_mask']
+		if par['train_input_weights']:
+			self.var_dict['W_in'] *= self.con_dict['W_in_mask']
 
 
 	def run_model(self, trial_info):
@@ -125,7 +134,8 @@ class Model:
 		# Clear gradients and epsilons
 		self.zero_state()
 
-		# Establish spike and output recording
+		# Establish voltage, spike, and output recording
+		self.v = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
 
@@ -136,6 +146,7 @@ class Model:
 		elif par['cell_type'] == 'adex':
 			state = self.con_dict['adex']['V_r'] * self.size_ref
 			adapt = self.con_dict['w_init'] * self.size_ref
+			trace = 0. * self.size_ref
 
 		# Set cell type
 		if par['cell_type'] == 'lif':
@@ -153,11 +164,12 @@ class Model:
 			latency_z = self.z[t-(1+par['latency_inds']),:,neuron_inds].T
 
 			# Run cell step
-			self.z[t,...], state, adapt, self.y[t,...], h = \
-				cell(self.input_data[t], latency_z, state, adapt, self.y[t-1,...])
+			self.z[t,...], state, adapt, trace, self.y[t,...], h = \
+				cell(self.input_data[t], latency_z, state, adapt, trace, self.y[t-1,...])
+			self.v[t,...] = state
 
 			# Update eligibilities and traces
-			epsi(self.input_data[t], state, self.z[t,...], self.z[t-1,...], h, t)
+			epsi(self.input_data[t], state, self.z[t,...], latency_z, h, t)
 
 			# Update pending weight changes
 			self.calculate_weight_updates(t)
@@ -215,20 +227,21 @@ class Model:
 		dt_over_tau   = c['dt']/c['tau'][s]
 		dt_a_over_tau = c['dt']*c['a'][s]/c['tau'][s]
 
+		EI = self.con_dict['EI_vector'][cp.newaxis,cp.newaxis,:]
+
 		# Make updates to the usual model
 		v = cp.minimum(-40e-3, v)
 		beta = 1. #(c['dt']/c['C'])
 
 		### Update epsilons
-		# Update trace of pre-synaptic activity [AKA x_hat and z_hat] (Eq. 5)
+		# Calculate eligibility traces (Eq. 2)
 		eps_v_inp_plc = beta*(1-z[:,:,cp.newaxis])*(
 				  self.eps_v['inp']*(C_over_dt + c['g'][s]*(cp.exp((v-c['V_T'][s])/c['D'][s])-1))
-				- self.eps_a['inp'] + x[:,cp.newaxis,:])
+				- self.eps_a['inp'] + self.eps_u['inp'])
 		eps_v_rec_plc = beta*(1-z[:,:,cp.newaxis])*(
 				  self.eps_v['rec']*(C_over_dt + c['g'][s]*(cp.exp((v-c['V_T'][s])/c['D'][s])-1))
-				- self.eps_a['rec'] + z_prev[:,cp.newaxis,:]*self.con_dict['EI_vector'][cp.newaxis,cp.newaxis,:])
+				- self.eps_a['rec'] + self.eps_u['rec'])
 
-		# Calculate eligibility traces (Eq. 27)
 		eps_a_inp_plc = \
 				  self.eps_v['inp']*(dt_a_over_tau + h*c['b'][s]) \
 				+ self.eps_a['inp']*(1-dt_over_tau)
@@ -236,36 +249,27 @@ class Model:
 				  self.eps_v['rec']*(dt_a_over_tau + h*c['b'][s]) \
 				+ self.eps_a['rec']*(1-dt_over_tau)
 
+		eps_u_inp_plc = c['beta']*self.eps_u['inp'] + x[:,cp.newaxis,:]
+		eps_u_rec_plc = c['beta']*self.eps_u['rec'] + z_prev[:,cp.newaxis,:]*EI
+
 		# Apply epsilon updates
 		self.eps_v['inp'] = eps_v_inp_plc
 		self.eps_v['rec'] = eps_v_rec_plc
 		self.eps_a['inp'] = eps_a_inp_plc
 		self.eps_a['rec'] = eps_a_rec_plc
+		self.eps_u['inp'] = eps_u_inp_plc
+		self.eps_u['rec'] = eps_u_rec_plc
 
 		### Update and modulate e's
-		# Increment kappa arrays forward in time (Eq. 46-48, k^(t-t') terms)
-		self.kappa['inp'] *= self.con_dict['adex']['kappa']
-		self.kappa['rec'] *= self.con_dict['adex']['kappa']
-		self.kappa['out'] *= self.con_dict['adex']['kappa']
+		# Calculate e's
+		e_inp = h * self.eps_v['inp']
+		e_rec = h * self.eps_v['rec']
+		e_out = self.z[t,...]
 
-		# Calculate trace impact on learning signal for input and recurrent weights (Eq. 5, 28, 47)
-		self.kappa['inp'] += h * self.eps_v['inp']
-		self.kappa['rec'] += h * self.eps_v['rec']
-
-		# Calculate output impact on learning signal for output weights
-		self.kappa['out'] += self.z[t,...]
-
-		if False:
-			print(t,
-				'| |', cp.mean(eps_v_rec_plc).astype(cp.int64),
-				'| |', cp.mean(v),
-				'| |', cp.mean(cp.exp((v-c['V_T'])/c['D'])-1),
-				'| |', cp.mean(-self.eps_a['inp']).astype(cp.int64),
-				'| |', cp.mean(z_prev[:,cp.newaxis,:]))
-			# print(t,
-			# 	'| |', cp.mean(eps_a_rec_plc).astype(cp.int64),
-			# 	'| |', cp.mean(self.eps_v['rec']).astype(cp.int64),
-			# 	'| |', cp.mean(self.eps_a['rec']).astype(cp.int64))
+		# Increment kappa arrays forward in time (Eq. 42-45, k^(t-t') terms)
+		self.kappa['inp'] = c['kappa']*self.kappa['inp'] + e_inp
+		self.kappa['rec'] = c['kappa']*self.kappa['rec'] + e_rec
+		self.kappa['out'] = c['kappa']*self.kappa['out'] + e_out
 
 
 	def calculate_weight_updates(self, t):
@@ -275,17 +279,12 @@ class Model:
 
 		# Calculate learning signals per layer (Eq. 4)
 		L_hid = cp.sum(self.var_dict['W_out'].T[cp.newaxis,...] * output_error[...,cp.newaxis], axis=1) \
-			- 0.01*cp.mean(self.z[t], axis=[1], keepdims=True)
+			- par['L_spike_cost']*cp.mean(self.z[t], axis=[1], keepdims=True)
 		L_out = output_error
 
-		# z_prev[:,cp.newaxis,:]*self.con_dict['EI_vector'][cp.newaxis,cp.newaxis,:]
-		# z_err = cp.mean(self.z[t])
-		# print(cp.mean(self.z[t], axis=[1], keepdims=True).shape)
-		# print(L_hid.shape)
-		# quit()
-
 		### Update pending weight changes
-		self.grad_dict['W_in']  += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa['inp'], axis=0).T
+		if par['train_input_weights']:
+			self.grad_dict['W_in']  += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa['inp'], axis=0).T
 		self.grad_dict['W_rnn'] += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa['rec'], axis=0).T
 		self.grad_dict['W_out'] += cp.mean(L_out[:,:,cp.newaxis] * self.kappa['out'][:,cp.newaxis,:], axis=0).T
 		self.grad_dict['b_out'] += cp.mean(L_out[:,:,cp.newaxis], axis=0).T
@@ -310,21 +309,23 @@ class Model:
 		return z, v, a, y, h
 
 
-	def AdEx_recurrent_cell(self, x, z, V, w, y):
+	def AdEx_recurrent_cell(self, x, z_i, V, w, u, y):
 
-		# Calculate input current and get AdEx cell states
-		I = x @ self.var_dict['W_in'] + z @ self.W_rnn_effective
-		V, w, z, v_th = run_adex(V, w, I, self.con_dict['adex'])
+		# Get AdEx cell states (input current is 'u', the input trace)
+		V, w, z_j, v_th = run_adex(V, w, u, self.con_dict['adex'])
 
-		# Calculate output based on current cell state (Eq. 12)
-		y = self.con_dict['adex']['kappa'] * y + z @ self.var_dict['W_out'] + self.var_dict['b_out']
+		# Update input trace based on incoming spikes
+		u = self.con_dict['adex']['beta'] * u + x @ self.var_dict['W_in'] + z_i @ self.W_rnn_effective
+
+		# Update output trace based on current cell state (Eq. 12)
+		y = self.con_dict['adex']['kappa'] * y + z_j @ self.var_dict['W_out'] + self.var_dict['b_out']
 
 		# Calculate h, the pseudo-derivative (Eq. 5, ~24, 20/21)
 		# Bellec et al., 2018b
 		# h = par['gamma'] * cp.maximum(0., 1 - cp.abs((V-v_th)/v_th))
 		h = par['gamma'] * cp.maximum(0., 1 - cp.abs((V-self.con_dict['adex']['V_T'])/10e-3))
 
-		return z, V, w, y, h
+		return z_j, V, w, u, y, h
 
 
 	def optimize(self):
@@ -369,7 +370,7 @@ class Model:
 			plt.imshow(to_cpu(self.grad_dict[n]), aspect='auto')
 			plt.colorbar()
 			plt.title(n + ' Gradient')
-			plt.savefig('./savedir/delta_{}_iter{}.png'.format(n, i), bbox_inches='tight')
+			plt.savefig('./savedir/double_delta_{}_iter{}.png'.format(n, i), bbox_inches='tight')
 			plt.clf()
 			plt.close()
 
@@ -405,25 +406,25 @@ def main():
 			full_accuracy, mean_spiking)
 		print(info_str0 + info_str1)
 
+		V_min = to_cpu(model.v[:,0,:].T.min())
+
 		if i%10==0:
-			fig, ax = plt.subplots(4,1, figsize=(16,10), sharex=True)
+			fig, ax = plt.subplots(4,1, figsize=(15,11), sharex=True)
 			ax[0].imshow(to_cpu(model.input_data[:,0,:].T), aspect='auto')
 			ax[0].set_title('Input Data')
-			ax[1].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
-			ax[1].set_title('Spiking')
-			ax[2].plot(1000.*to_cpu(np.mean(model.z[:,0,:], axis=(1))))
-			ax[2].set_title('Trial 0 Mean Spiking')
-			ax[2].set_xlim(0,par['num_time_steps'])
-			ax[3].plot(1000.*to_cpu(np.mean(model.z, axis=(1,2))))
-			ax[3].set_title('All Trials Mean Spiking')
-			ax[3].set_xlim(0,par['num_time_steps'])
+			ax[1].imshow(to_cpu((model.input_data[:,0,:] @ model.var_dict['W_in']).T), aspect='auto')
+			ax[1].set_title('Projected Inputs')
+			ax[2].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
+			ax[2].set_title('Spiking')
+			ax[3].imshow(to_cpu(model.v[:,0,:].T), aspect='auto', clim=(V_min,0.))
+			ax[3].set_title('Membrane Voltage ($(V_r = {:5.3f}), {:5.3f} \\leq V_j^t \\leq 0$)'.format(par['adex']['V_r'].min(), V_min))
 
 			ax[0].set_ylabel('Input Neuron')
 			ax[1].set_ylabel('Hidden Neuron')
-			ax[2].set_ylabel('Hz')
-			ax[3].set_ylabel('Hz')
+			ax[2].set_ylabel('Hidden Neuron')
+			ax[3].set_ylabel('Hidden Neuron')
 
-			plt.savefig('./savedir/diagnostic_iter{:0>4}.png'.format(i), bbox_inches='tight')
+			plt.savefig('./savedir/double_iter{:0>6}.png'.format(i), bbox_inches='tight')
 			plt.clf()
 			plt.close()
 

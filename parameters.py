@@ -18,16 +18,18 @@ par = {
 	'learning_rate'			: 2e-4,
 
 	# Network shape
-	'num_motion_tuned'      : 24,
-	'num_fix_tuned'         : 4,
+	'num_motion_tuned'      : 96,
+	'num_fix_tuned'         : 16,
 	'num_rule_tuned'        : 0,
 	'num_receptive_fields'  : 1,
 	'num_motion_dirs'       : 8,
-	'n_hidden'              : 250,
+	'n_hidden'              : 500,
 	'n_output'              : 3,
 
-	# Pseudo derivative
+	# Optimization parameters
 	'gamma'					: 0.3,
+	'L_spike_cost'			: 0.01,
+	'train_input_weights'	: False,
 
 	# EI setup
 	'EI_prop'               : 0.8,
@@ -44,9 +46,10 @@ par = {
 	'adam_epsilon'          : 1e-8,
 
 	# Noise and weight scaling values
-	'input_gamma'           : 0.008,
-	'rnn_gamma'             : 0.02,
-	'output_gamma'          : 0.08,
+	'input_gamma'           : 0.002,
+	'rnn_gamma'             : 0.008,
+	'output_gamma'          : 0.05,
+	'rnn_cap'				: 0.004,
 	'noise_rnn_sd'          : 0.5,
 	'noise_in_sd'           : 0.2,
 
@@ -57,7 +60,7 @@ par = {
 	'latency'				: [5,15],	# No latency = None
 
 	# Task setup
-	'task'                  : 'oic',
+	'task'                  : 'dmc',
 	'kappa'                 : 2.0,
 	'tuning_height'         : 100.0,
 	'response_multiplier'   : 1.,
@@ -100,7 +103,8 @@ def update_dependencies():
 	par['W_in_mask']	= np.ones([par['n_input'],par['n_hidden']])
 	par['W_in_mask'][:,::2] = 0.
 
-	par['W_out_init']	= np.random.gamma(par['output_gamma'], scale=1.0, size=[par['n_hidden'], par['n_output']])
+	# par['W_out_init']	= np.random.gamma(par['output_gamma'], scale=1.0, size=[par['n_hidden'], par['n_output']])
+	par['W_out_init']	= np.random.uniform(-par['output_gamma'], par['output_gamma'], size=[par['n_hidden'], par['n_output']])
 
 	if par['EI_prop'] == 1.:
 		par['W_rnn_init'] = np.random.uniform(-par['rnn_gamma'], par['rnn_gamma'], size=[par['n_hidden'],par['n_hidden']])
@@ -135,28 +139,27 @@ def update_dependencies():
 
 	### LIF spiking (max 40-50 Hz; 10-20 Hz for preferred dir)
 
-	if False:
+	if not par['train_input_weights']:
+		# import matplotlib.pyplot as plt
+		# fig, ax = plt.subplots(2,1)
+		# ax[0].imshow(par['W_in_init'],aspect='auto')
+
 		par['W_in_const'] = np.zeros((par['n_input'], par['n_hidden']))
 		U = np.linspace(0, 360, par['n_input'])
-		# beta = 0.04
-		# kappa = 2
-		# beta = 0.04
-		# kappa = 0.75
-		# kappa = 15
-		# beta = 1.5
-		beta = 0.2
-		kappa = 1.5
-		z = beta/np.exp(kappa)
-		for i in range(par['n_hidden']//2):
-			y = z * np.exp(kappa*np.cos(np.radians(U - i*((2*par['n_hidden'])/par['n_input']))))
-			par['W_in_const'][:,i] = y
-		par['W_in_init'] = par['W_in_const']
 
-	# import matplotlib.pyplot as plt
-	# fig, ax = plt.subplots(2,1)
-	# ax[0].imshow(par['W_in_const'],aspect='auto')
-	# ax[1].imshow(par['W_in_init'],aspect='auto')
-	# plt.show()
+		beta = 0.2
+		kappa = 7.
+		z = beta/np.exp(kappa)
+		for i in range(0, par['n_hidden'], 2):
+			if i < par['n_EI']:
+				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.2*par['n_hidden']/par['n_input']))))
+			else:
+				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.8*par['n_hidden']/par['n_input']))))
+			par['W_in_const'][:,i] = y
+		par['W_in_init'] = 0.1*par['W_in_const']
+
+		# ax[1].imshow(par['W_in_const'],aspect='auto')
+		# plt.show()
 
 
 	par['adex'] = {}
@@ -188,6 +191,9 @@ def update_dependencies():
 		par['adex']['dt']  = par['dt']/1000
 		par['w_init'] = par['adex']['b']
 		par['adex']['current_divider'] = par['current_divider']
+
+		par['tau_i'] = 10e-3
+		par['adex']['beta']	= np.exp(-par['dt_sec']/par['tau_i'])
 
 		par['tau_o'] = 20e-3
 		par['adex']['kappa'] = np.exp(-par['dt_sec']/par['tau_o'])
