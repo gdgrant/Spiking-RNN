@@ -138,6 +138,10 @@ class Model:
 		self.v = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
+		
+		# Containers for learning
+		self.dw = cp.zeros([par['learning_window']])
+		self.count = cp.zeros([par['learning_window']])
 
 		# Initialize cell states
 		if par['cell_type'] == 'lif':
@@ -173,7 +177,7 @@ class Model:
 
 			# Update pending weight changes
 			self.calculate_weight_updates(t)
-
+			self.calculate_stdp(t)
 
 	def LIF_update_eligibility(self, x, v, z, z_prev, h, t):
 
@@ -284,10 +288,20 @@ class Model:
 
 		### Update pending weight changes
 		if par['train_input_weights']:
-			self.grad_dict['W_in']  += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa['inp'], axis=0).T
-		self.grad_dict['W_rnn'] += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa['rec'], axis=0).T
-		self.grad_dict['W_out'] += cp.mean(L_out[:,:,cp.newaxis] * self.kappa['out'][:,cp.newaxis,:], axis=0).T
-		self.grad_dict['b_out'] += cp.mean(L_out[:,:,cp.newaxis], axis=0).T
+			self.grad_dict['W_in'] += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa['inp'], axis=0).T
+		self.grad_dict['W_rnn_delta'] = cp.mean(L_hid[:,:,cp.newaxis] * self.kappa['rec'], axis=0).T
+		self.grad_dict['W_rnn'] += self.grad_dict['W_rnn_delta']
+		self.grad_dict['W_out'] = cp.mean(L_out[:,:,cp.newaxis] * self.kappa['out'][:,cp.newaxis,:], axis=0).T
+		self.grad_dict['b_out'] = cp.mean(L_out[:,:,cp.newaxis], axis=0).T
+
+
+	def calculate_stdp(self, t):
+		pre = self.z[t-(par['learning_window']//2)-10:t+(par['learning_window']//2)+10,...]
+		post = self.z[t,...]
+
+		pre_post = (pre[:,:,np.newaxis] @ post[np.newaxis,:]) * par['stdp_mask_ee']
+		self.count += cp.sum(pre_post, axis=(1,2))
+		self.dw += pre_post * self.grad_dict['W_rnn_delta']
 
 
 	def LIF_recurrent_cell(self, x, z, v, a, y):
@@ -407,6 +421,9 @@ def main():
 		print(info_str0 + info_str1)
 
 		V_min = to_cpu(model.v[:,0,:].T.min())
+
+		plt.plot(model.dw)
+		plt.show()
 
 		if i%10==0:
 			fig, ax = plt.subplots(4,1, figsize=(15,11), sharex=True)

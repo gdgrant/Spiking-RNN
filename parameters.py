@@ -58,6 +58,7 @@ par = {
 	'membrane_constant'     : 100,
 	'output_constant'       : 20,
 	'latency'				: [5,15],	# No latency = None
+	'learning_window'		: 100,
 
 	# Task setup
 	'task'                  : 'dmc',
@@ -146,6 +147,10 @@ def update_dependencies():
 		par['latency_inds'] = 0
 	else:
 		par['latency_inds'] = np.random.randint(*par['latency'], size=par['n_hidden'])
+
+	par['stdp_mask_ee'] = np.ones((par['n_hidden'], par['n_hidden']))
+	# par['stdp_mask_ee'] ///
+
 
 	### LIF spiking (max 40-50 Hz; 10-20 Hz for preferred dir)
 
