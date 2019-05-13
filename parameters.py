@@ -12,23 +12,23 @@ par = {
 	'optimizer'				: 'adam',
 
 	# Training environment
-	'batch_size'            : 256,
+	'batch_size'            : 64, # 64
 	'iterations'            : 100000,
 	'cell_type'             : 'adex',   # 'lif', 'adex'
-	'learning_rate'			: 2e-4,
+	'learning_rate'			: 5e-5, #5e-5
 
 	# Network shape
 	'num_motion_tuned'      : 96,
-	'num_fix_tuned'         : 16,
+	'num_fix_tuned'         : 8,
 	'num_rule_tuned'        : 0,
 	'num_receptive_fields'  : 1,
 	'num_motion_dirs'       : 8,
-	'n_hidden'              : 500,
+	'n_hidden'              : 1200,
 	'n_output'              : 3,
 
 	# Optimization parameters
 	'gamma'					: 0.3,
-	'L_spike_cost'			: 0.01,
+	'L_spike_cost'			: 0.001, # was 0.01
 	'train_input_weights'	: False,
 
 	# EI setup
@@ -46,10 +46,10 @@ par = {
 	'adam_epsilon'          : 1e-8,
 
 	# Noise and weight scaling values
-	'input_gamma'           : 0.002,
-	'rnn_gamma'             : 0.008,
-	'output_gamma'          : 0.05,
-	'rnn_cap'				: 0.004,
+	'input_gamma'           : 0.0015,
+	'rnn_gamma'             : 0.004,
+	'output_gamma'          : 0.01,
+	'rnn_cap'				: 0.0015,
 	'noise_rnn_sd'          : 0.5,
 	'noise_in_sd'           : 0.2,
 
@@ -63,18 +63,23 @@ par = {
 	'task'                  : 'dmc',
 	'kappa'                 : 2.0,
 	'tuning_height'         : 100.0,
-	'response_multiplier'   : 1.,
+	'response_multiplier'   : 2.,
 	'num_rules'             : 1,
 	'fixation_on'           : True,
 
 	# Task timings
 	'dead_time'             : 20,
-	'fix_time'              : 50,
-	'sample_time'           : 120,
-	'delay_time'            : 60,
-	'test_time'             : 120,
-	'mask_time'             : 30,
+	'fix_time'              : 30,
+	'sample_time'           : 150,
+	'delay_time'            : 250,
+	'test_time'             : 150,
+	'mask_time'             : 40,
+
+	'puedo_th'				: 5e-3,
 }
+
+print('Sample ', par['sample_time'],'Delay ', par['delay_time'],'Test ', par['test_time'])
+print('n_hidden ', par['n_hidden'], 'puedo_th', par['puedo_th'])
 
 
 def update_parameters(updates):
@@ -101,7 +106,10 @@ def update_dependencies():
 
 	par['W_in_init']	= np.random.gamma(par['input_gamma'],  scale=1.0, size=[par['n_input'],  par['n_hidden']])
 	par['W_in_mask']	= np.ones([par['n_input'],par['n_hidden']])
-	par['W_in_mask'][:,::2] = 0.
+	par['W_in_mask'][:,0::4] = 0.
+	par['W_in_mask'][:,1::2] = 0.
+	par['W_in_mask'][:,2::4] = 0.
+
 
 	# par['W_out_init']	= np.random.gamma(par['output_gamma'], scale=1.0, size=[par['n_hidden'], par['n_output']])
 	par['W_out_init']	= np.random.uniform(-par['output_gamma'], par['output_gamma'], size=[par['n_hidden'], par['n_output']])
@@ -115,6 +123,8 @@ def update_dependencies():
 			par['W_rnn_init'][par['n_EI']:,:par['n_EI']] *= 2
 			par['W_rnn_init'][:par['n_EI'],par['n_EI']:] *= 2
 		# par['W_rnn_init'] = np.random.uniform(0, par['rnn_gamma'], size=[par['n_hidden'],par['n_hidden']])
+
+	#par['W_rnn_init'] += 0.5*par['W_rnn_init'].T
 
 	par['b_rnn_init']   = np.zeros([1, par['n_hidden']])
 	par['b_out_init']   = np.zeros([1, par['n_output']])
@@ -156,7 +166,7 @@ def update_dependencies():
 			else:
 				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.8*par['n_hidden']/par['n_input']))))
 			par['W_in_const'][:,i] = y
-		par['W_in_init'] = 0.1*par['W_in_const']
+		par['W_in_init'] = 0.2*par['W_in_const']
 
 		# ax[1].imshow(par['W_in_const'],aspect='auto')
 		# plt.show()
@@ -192,7 +202,7 @@ def update_dependencies():
 		par['w_init'] = par['adex']['b']
 		par['adex']['current_divider'] = par['current_divider']
 
-		par['tau_i'] = 10e-3
+		par['tau_i'] = 20e-3
 		par['adex']['beta']	= np.exp(-par['dt_sec']/par['tau_i'])
 
 		par['tau_o'] = 20e-3
