@@ -63,6 +63,7 @@ class Model:
 		""" Make eligibility trace variables """
 
 		self.eps_v = {}
+
 		self.eps_a = {}
 		self.eps_u = {}
 		self.kappa = {}
@@ -115,7 +116,7 @@ class Model:
 			self.var_dict['W_in'] *= self.con_dict['W_in_mask']
 
 
-	def run_model(self, trial_info):
+	def run_model(self, i, trial_info):
 		""" Run the model by:
 			 - Loading trial data
 			 - Setting initial states
@@ -177,7 +178,10 @@ class Model:
 
 			# Update pending weight changes
 			self.calculate_weight_updates(t)
-			self.calculate_stdp(t)
+			
+			# Calculate STDP
+			if i % 50 == 0:
+				self.calculate_stdp(i, t)
 
 	def LIF_update_eligibility(self, x, v, z, z_prev, h, t):
 
@@ -283,7 +287,7 @@ class Model:
 
 		# Calculate learning signals per layer (Eq. 4)
 		L_hid = cp.sum(self.var_dict['W_out'].T[cp.newaxis,...] * output_error[...,cp.newaxis], axis=1) \
-			- par['L_spike_cost']*cp.mean(self.z[t], axis=[1], keepdims=True)
+			- par['L_spike_cost']*cp.mean(self.z[t], axis=(1), keepdims=True)
 		L_out = output_error
 
 		### Update pending weight changes
@@ -295,13 +299,15 @@ class Model:
 		self.grad_dict['b_out'] = cp.mean(L_out[:,:,cp.newaxis], axis=0).T
 
 
-	def calculate_stdp(self, t):
-		pre = self.z[t-(par['learning_window']//2)-10:t+(par['learning_window']//2)+10,...]
-		post = self.z[t,...]
+	def calculate_stdp(self, i, t):
+		if t > 60 and t < par['num_time_steps']-40:
+			pre = self.z[t-(par['learning_window']//2)-10:t+(par['learning_window']//2)-10,...]
+			post = self.z[t,...]
 
-		pre_post = (pre[:,:,np.newaxis] @ post[np.newaxis,:]) * par['stdp_mask_ee']
-		self.count += cp.sum(pre_post, axis=(1,2))
-		self.dw += pre_post * self.grad_dict['W_rnn_delta']
+			# pre_post = (pre[...,np.newaxis] @ post[np.newaxis,...]) * par['stdp_mask_ee']
+			pre_post = (pre[...,np.newaxis] @ post[:,cp.newaxis,...]) * par['stdp_mask_ee']
+			self.count += cp.sum(pre_post, axis=(1,2,3))
+			self.dw += cp.sum(cp.mean(pre_post, axis=(1)) * self.grad_dict['W_rnn_delta'], axis=(1,2))
 
 
 	def LIF_recurrent_cell(self, x, z, v, a, y):
@@ -407,7 +413,7 @@ def main():
 	for i in range(par['iterations']):
 
 		# Process a batch of stimulus using the current models
-		model.run_model(stim.make_batch())
+		model.run_model(i, stim.make_batch())
 		model.optimize()
 
 		losses = model.get_losses()
@@ -422,8 +428,6 @@ def main():
 
 		V_min = to_cpu(model.v[:,0,:].T.min())
 
-		plt.plot(model.dw)
-		plt.show()
 
 		if i%10==0:
 			fig, ax = plt.subplots(4,1, figsize=(15,11), sharex=True)
@@ -448,6 +452,9 @@ def main():
 
 		if i%50 == 0:
 			model.visualize_delta(i)
+			plt.plot(model.dw)
+			plt.savefig('./savedir/dw_{}.png'.format(i))
+			plt.close()
 
 
 if __name__ == '__main__':

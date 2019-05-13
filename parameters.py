@@ -23,7 +23,7 @@ par = {
 	'num_rule_tuned'        : 0,
 	'num_receptive_fields'  : 1,
 	'num_motion_dirs'       : 8,
-	'n_hidden'              : 1200,
+	'n_hidden'              : 40,
 	'n_output'              : 3,
 
 	# Optimization parameters
@@ -148,9 +148,11 @@ def update_dependencies():
 	else:
 		par['latency_inds'] = np.random.randint(*par['latency'], size=par['n_hidden'])
 
+	# STDP mask for exc to exc neuron connections
 	par['stdp_mask_ee'] = np.ones((par['n_hidden'], par['n_hidden']))
-	# par['stdp_mask_ee'] ///
-
+	par['stdp_mask_ee'][par['n_EI']:,:] = 0
+	par['stdp_mask_ee'][:,par['n_EI']:] = 0
+	np.fill_diagonal(par['stdp_mask_ee'], 0)
 
 	### LIF spiking (max 40-50 Hz; 10-20 Hz for preferred dir)
 
