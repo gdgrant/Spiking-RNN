@@ -302,7 +302,6 @@ class Model:
 	def calculate_stdp(self, i, t):
 		if t > 60 and t < par['num_time_steps']-40:
 			pre = self.z[t-(par['learning_window']//2)-10:t+(par['learning_window']//2)-10,...]
-			pre[t,...] = 0
 			post = self.z[t,...]
 
 			pre_post = (pre[...,np.newaxis] @ post[:,cp.newaxis,...]) * par['stdp_mask_ee']
