@@ -23,7 +23,7 @@ par = {
 	'num_rule_tuned'        : 0,
 	'num_receptive_fields'  : 1,
 	'num_motion_dirs'       : 8,
-	'n_hidden'              : 40,
+	'n_hidden'              : 1200,
 	'n_output'              : 3,
 
 	# Optimization parameters

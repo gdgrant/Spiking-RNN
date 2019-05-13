@@ -304,7 +304,6 @@ class Model:
 			pre = self.z[t-(par['learning_window']//2)-10:t+(par['learning_window']//2)-10,...]
 			post = self.z[t,...]
 
-			# pre_post = (pre[...,np.newaxis] @ post[np.newaxis,...]) * par['stdp_mask_ee']
 			pre_post = (pre[...,np.newaxis] @ post[:,cp.newaxis,...]) * par['stdp_mask_ee']
 			self.count += cp.sum(pre_post, axis=(1,2,3))
 			self.dw += cp.sum(cp.mean(pre_post, axis=(1)) * self.grad_dict['W_rnn_delta'], axis=(1,2))
