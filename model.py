@@ -39,7 +39,7 @@ class Model:
 
 		constants = [
 			'n_hidden', 'noise_rnn', 'adex', 'lif', 'W_in_mask', \
-			'w_init', 'beta_neuron', 'EI_vector', 'EI_mask', 'W_rnn_mask']
+			'w_init', 'beta_neuron', 'EI_vector', 'EI_mask', 'W_rnn_mask', 'stdp_mask_ee']
 
 		self.con_dict = {}
 		for c in constants:
@@ -307,8 +307,8 @@ class Model:
 			pre = self.z[t0:t1,...]
 			post = self.z[t,...]
 
-			pre_post = np.einsum('tbi,bj->tij', pre, post)
-			pre_post *= par['stdp_mask_ee']
+			pre_post = cp.einsum('tbi,bj->tij', pre, post)
+			pre_post *= self.con_dict['stdp_mask_ee']
 
 			# pre_post = (pre[...,np.newaxis] * post[:,cp.newaxis,...]) * par['stdp_mask_ee']
 			self.count += cp.sum(pre_post, axis=(1,2))
