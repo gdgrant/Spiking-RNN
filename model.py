@@ -180,7 +180,7 @@ class Model:
             self.calculate_weight_updates(t)
             
             # Calculate STDP
-            if i % 50 == 0:
+            if i % 20 == 0:
                 self.calculate_stdp(i, t)
 
     def LIF_update_eligibility(self, x, v, z, z_prev, h, t):
@@ -304,17 +304,17 @@ class Model:
             t0 = cp.maximum(0, t-par['learning_window']//2-10)
             # t1 = cp.minimum(par['num_time_steps']-40, t+par['learning_window']//2-10)
 
-            pre = self.z[t0:t+1,...] # window x batch x neuron
+            pre = self.z[t0:t-9,...] # window x batch x neuron
             post = self.z[t,...] # batch x neuron
 
             pre_post = cp.einsum('tbi,bj->tij', pre, post)
             pre_post *= self.con_dict['stdp_mask_ee'] # window x neuron x neuron
             # pre_post = (pre[...,np.newaxis] * post[:,cp.newaxis,...]) * par['stdp_mask_ee']
 
-            self.count[40:] += cp.sum(pre_post, axis=(1,2))
-            self.count[:40] += cp.sum(pre_post[21:], axis=(1,2))
-            self.dw[40:] += np.flip(cp.sum(pre_post * self.grad_dict['W_rnn_delta'], axis=(1,2)), axis=0)
-            self.dw[:40] += cp.sum(pre_post * self.grad_dict['W_rnn_delta'].T, axis=(1,2))[21:]
+            self.count[50:] += cp.sum(pre_post, axis=(1,2))
+            # self.count[:40] += cp.sum(pre_post[10:-11], axis=(1,2))
+            self.dw[50:] += np.flip(cp.sum(pre_post * self.grad_dict['W_rnn_delta'], axis=(1,2)), axis=0)
+            # self.dw[:40] += cp.sum(pre_post * self.grad_dict['W_rnn_delta'].T, axis=(1,2))[10:-11]
 
 
     def LIF_recurrent_cell(self, x, z, v, a, y):
@@ -457,7 +457,7 @@ def main():
             plt.close()
 
 
-        if i%50 == 0:
+        if i%20 == 0:
             model.visualize_delta(i)
             plt.plot(np.arange(-50,51), to_cpu(model.dw))
             plt.savefig('./savedir/dw_{}.png'.format(i))
