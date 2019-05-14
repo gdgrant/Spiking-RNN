@@ -301,12 +301,18 @@ class Model:
 
 	def calculate_stdp(self, i, t):
 		if t > 60 and t < par['num_time_steps']-40:
-			pre = self.z[t-(par['learning_window']//2)-10:t+(par['learning_window']//2)-10,...]
+			t0 = cp.maximum(0, t-par['learning_window']//2-10)
+			t1 = cp.minimum(par['num_time_steps']-40, par['learning_window']//2+10)
+
+			pre = self.z[t0:t1,...]
 			post = self.z[t,...]
 
-			pre_post = (pre[...,np.newaxis] @ post[:,cp.newaxis,...]) * par['stdp_mask_ee']
-			self.count += cp.sum(pre_post, axis=(1,2,3))
-			self.dw += cp.sum(cp.mean(pre_post, axis=(1)) * self.grad_dict['W_rnn_delta'], axis=(1,2))
+			pre_post = np.einsum('tbi,bj->tij', pre, post)
+			pre_post *= par['stdp_mask_ee']
+
+			# pre_post = (pre[...,np.newaxis] * post[:,cp.newaxis,...]) * par['stdp_mask_ee']
+			self.count += cp.sum(pre_post, axis=(1,2))
+			self.dw += cp.sum(pre_post * self.grad_dict['W_rnn_delta'], axis=(1,2))
 
 
 	def LIF_recurrent_cell(self, x, z, v, a, y):
