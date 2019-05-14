@@ -313,7 +313,8 @@ class Model:
 
             self.count[40:] += cp.sum(pre_post, axis=(1,2))
             self.count[:40] += cp.sum(pre_post[10:-11], axis=(1,2))
-            self.dw[40:] += np.flip(cp.sum(pre_post * self.grad_dict['W_rnn_delta'], axis=(1,2)), axis=0)
+            self.dw[50:] += np.flip(cp.sum(pre_post[:-10] * self.grad_dict['W_rnn_delta'], axis=(1,2)), axis=0)
+            self.dw[40:50] += np.flip(cp.sum(pre_post[-10:] * self.grad_dict['W_rnn_delta'].T, axis=(1,2)), axis=0)
             self.dw[:40] += cp.sum(pre_post * self.grad_dict['W_rnn_delta'].T, axis=(1,2))[10:-11]
 
 
