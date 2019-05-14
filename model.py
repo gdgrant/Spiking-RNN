@@ -141,8 +141,8 @@ class Model:
         self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
         
         # Containers for learning
-        self.dw = cp.zeros([par['learning_window']])
-        self.count = cp.zeros([par['learning_window']])
+        self.dw = cp.zeros([par['learning_window']+1])
+        self.count = cp.zeros([par['learning_window']+1])
 
         # Initialize cell states
         if par['cell_type'] == 'lif':
@@ -300,19 +300,22 @@ class Model:
 
 
     def calculate_stdp(self, i, t):
-        if t > 60 and t < par['num_time_steps']-40:
+        if t > 60 and t < par['num_time_steps']-60:
             t0 = cp.maximum(0, t-par['learning_window']//2-10)
-            t1 = cp.minimum(par['num_time_steps']-40, par['learning_window']//2+10)
+            # t1 = cp.minimum(par['num_time_steps']-40, t+par['learning_window']//2-10)
 
-            pre = self.z[t0:t1,...]
+            pre = self.z[t0:t+1,...]
             post = self.z[t,...]
 
             pre_post = cp.einsum('tbi,bj->tij', pre, post)
             pre_post *= self.con_dict['stdp_mask_ee']
 
             # pre_post = (pre[...,np.newaxis] * post[:,cp.newaxis,...]) * par['stdp_mask_ee']
-            self.count += cp.sum(pre_post, axis=(1,2))
-            self.dw += cp.sum(pre_post * self.grad_dict['W_rnn_delta'], axis=(1,2))
+
+            self.count[40:] += cp.sum(pre_post, axis=(1,2))
+            self.count[:40] += cp.sum(pre_post[21:], axis=(1,2))
+            self.dw[40:] += np.flip(cp.sum(pre_post * self.grad_dict['W_rnn_delta'], axis=(1,2)), axis=0)
+            self.dw[:40] += cp.sum(pre_post * self.grad_dict['W_rnn_delta'].T, axis=(1,2))[21:]
 
 
     def LIF_recurrent_cell(self, x, z, v, a, y):
@@ -457,7 +460,7 @@ def main():
 
         if i%50 == 0:
             model.visualize_delta(i)
-            plt.plot(model.dw)
+            plt.plot(to_cpu(model.dw))
             plt.savefig('./savedir/dw_{}.png'.format(i))
             plt.close()
 
