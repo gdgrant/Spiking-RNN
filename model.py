@@ -304,12 +304,11 @@ class Model:
             t0 = cp.maximum(0, t-par['learning_window']//2-10)
             # t1 = cp.minimum(par['num_time_steps']-40, t+par['learning_window']//2-10)
 
-            pre = self.z[t0:t+1,...]
-            post = self.z[t,...]
+            pre = self.z[t0:t+1,...] # window x batch x neuron
+            post = self.z[t,...] # batch x neuron
 
             pre_post = cp.einsum('tbi,bj->tij', pre, post)
-            pre_post *= self.con_dict['stdp_mask_ee']
-
+            pre_post *= self.con_dict['stdp_mask_ee'] # window x neuron x neuron
             # pre_post = (pre[...,np.newaxis] * post[:,cp.newaxis,...]) * par['stdp_mask_ee']
 
             self.count[40:] += cp.sum(pre_post, axis=(1,2))
@@ -460,7 +459,7 @@ def main():
 
         if i%50 == 0:
             model.visualize_delta(i)
-            plt.plot(to_cpu(model.dw))
+            plt.plot(np.arange(-50,51), to_cpu(model.dw))
             plt.savefig('./savedir/dw_{}.png'.format(i))
             plt.close()
 
