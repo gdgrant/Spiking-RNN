@@ -1,4 +1,4 @@
-from utils import *
+from imports import *
 
 
 ### Adaptive Leaky-Integrate-and-Fire spiking model
