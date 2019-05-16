@@ -1,4 +1,5 @@
-from parameters import *
+from imports import *
+from parameters import par
 
 class Stimulus:
 

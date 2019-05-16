@@ -1,85 +1,138 @@
-import numpy as np
-from itertools import product
-from math import trunc
+from imports import *
+
+
+### Model parameters
+
 print('\n--> Loading parameters...')
 
 global par
 par = {
-
-	# Context
-	'save_dir'              : './savedir/',
-	'save_fn'               : 'lif_testing',
-	'optimizer'				: 'adam',
+	
+	# File context
+	'save_dir'                : './savedir/',
+	'savefn'                  : 'testing',
 
 	# Training environment
-	'batch_size'            : 64, # 64
-	'iterations'            : 100000,
-	'cell_type'             : 'adex',   # 'lif', 'adex'
-	'learning_rate'			: 5e-5, #5e-5
-
-	# Network shape
-	'num_motion_tuned'      : 96,
-	'num_fix_tuned'         : 8,
-	'num_rule_tuned'        : 0,
-	'num_receptive_fields'  : 1,
-	'num_motion_dirs'       : 8,
-	'n_hidden'              : 1200,
-	'n_output'              : 3,
+	'batch_size'              : 64,
+	'iterations'              : 100000,
+	'learning_rate'           : 1e-5,
+	'cell_type'               : 'adex',
+	'optimizer'               : 'adam',
 
 	# Optimization parameters
-	'gamma'					: 0.3,
-	'L_spike_cost'			: 0.001, # was 0.01
-	'train_input_weights'	: False,
+	'gamma_psd'               : 0.3,
+	'L_spike_cost'            : 0.001,
+	'train_input_weights'     : False,
+	'pseudo_th'               : 10e-3,
 
-	# EI setup
-	'EI_prop'               : 0.8,
-	'balance_EI'            : True,
+	# Model architecture
+	'use_stp'                 : True,
+	'EI_prop'                 : 0.8,
+	'balance_EI'              : True,
 
-	# AdEx parameters
-	'exc_model'             : 'RS',
-	'inh_model'             : 'cNA',
-	'current_divider'       : 5e8,
+	# Network shape
+	'num_motion_tuned'        : 96,
+	'num_fix_tuned'           : 8,
+	'num_rule_tuned'          : 0,
+	'num_receptive_fields'    : 1,
+	'n_hidden'                : 1000,
+	'n_output'                : 3,
+
+	# Timing constants (all in ms)
+	'dt'                      : 1,
+	'tau_hid'                 : 20,
+	'tau_out'                 : 20,
+	'latency'                 : [10,11],	# No latency = None
+
+	# AdEx architecture
+	'exc_model'               : 'RS',
+	'inh_model'               : 'cNA',
+	'current_divider'         : 1e9,
+
+	# Synaptic plasticity setup
+	'tau_fast'                : 200,
+	'tau_slow'                : 1500,
+	'U_stf'                   : 0.15,
+	'U_std'                   : 0.45,
 
 	# Adam parameters
-	'adam_beta1'            : 0.9,
-	'adam_beta2'            : 0.999,
-	'adam_epsilon'          : 1e-8,
+	'adam_beta1'              : 0.9,
+	'adam_beta2'              : 0.999,
+	'adam_epsilon'            : 1e-8,
 
-	# Noise and weight scaling values
-	'input_gamma'           : 0.0015,
-	'rnn_gamma'             : 0.004,
-	'output_gamma'          : 0.01,
-	'rnn_cap'				: 0.0015,
-	'noise_rnn_sd'          : 0.5,
-	'noise_in_sd'           : 0.2,
-
-	# Timing constants
-	'dt'                    : 1,
-	'membrane_constant'     : 100,
-	'output_constant'       : 20,
-	'latency'				: [5,15],	# No latency = None
+	# Noise and weight scaling
+	'input_gamma'             : 0.003,
+	'rnn_gamma'               : 0.01,
+	'output_gamma'            : 0.01,
+	'rnn_cap'                 : 0.006,
+	'noise_in_sd'             : 0.5,
 
 	# Task setup
-	'task'                  : 'dmc',
-	'kappa'                 : 2.0,
-	'tuning_height'         : 100.0,
-	'response_multiplier'   : 2.,
-	'num_rules'             : 1,
-	'fixation_on'           : True,
+	'task'                    : 'dmc',
+	'num_motion_dirs'         : 8,
+    'kappa'                   : 2.,
+    'tuning_height'           : 100.,
+    'response_multiplier'     : 2.,
+    'num_rules'               : 1,
+    'fixation_on'             : True,
 
-	# Task timings
-	'dead_time'             : 20,
-	'fix_time'              : 30,
-	'sample_time'           : 150,
-	'delay_time'            : 250,
-	'test_time'             : 150,
-	'mask_time'             : 40,
+    # Task timings
+    'dead_time'               : 20,
+	'fix_time'                : 30,
+	'sample_time'             : 100,
+	'delay_time'              : 200,
+	'test_time'               : 150,
+	'mask_time'               : 40,
 
-	'puedo_th'				: 5e-3,
 }
 
-print('Sample ', par['sample_time'],'Delay ', par['delay_time'],'Test ', par['test_time'])
-print('n_hidden ', par['n_hidden'], 'puedo_th', par['puedo_th'])
+
+def make_weights_and_masks():
+
+	# Make W_in and mask
+	par['W_in_init'] = np.random.gamma(par['input_gamma'], \
+		scale=1., size=[par['n_input'], par['n_hidden']])
+	par['W_in_mask'] = np.zeros_like(par['W_in_init'])
+	par['W_in_mask'][:,0:par['n_EI']:3] = 1.
+
+	# Make W_out and mask
+	par['W_out_init'] = np.random.uniform(-par['output_gamma'], par['output_gamma'], size=[par['n_hidden'], par['n_output']])
+	par['W_out_mask'] = np.ones_like(par['W_out_init'])
+
+	# Make b_out and mask
+	par['b_out_init'] = np.zeros([1, par['n_output']])
+	par['b_out_mask'] = np.ones_like(par['b_out_init'])
+
+	# Make W_rnn and mask
+	if par['EI_prop'] == 1.:
+		par['W_rnn_init'] = np.random.uniform(-par['rnn_gamma'], par['rnn_gamma'], size=[par['n_hidden'],par['n_hidden']])
+	else:
+		par['W_rnn_init'] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=[par['n_hidden'], par['n_hidden']])		
+		if par['balance_EI']:
+			par['W_rnn_init'][par['n_EI']:,:par['n_EI']] *= 2
+			par['W_rnn_init'][:par['n_EI'],par['n_EI']:] *= 2
+
+	par['W_rnn_mask']   = 1 - np.eye(par['n_hidden'])
+	par['W_rnn_init']  *= par['W_rnn_mask']
+
+	# Remake W_in and mask if weight won't be trained
+	if not par['train_input_weights']:
+
+		par['W_in_const'] = np.zeros_like(par['W_in_init'])
+		U = np.linspace(0, 360, par['n_input'])
+
+		beta = 0.2
+		kappa = 7.
+		z = beta/np.exp(kappa)
+		for i in range(0, par['n_hidden'], 4):
+			if i < par['n_EI']:
+				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.05*par['n_hidden']/par['n_input']))))
+			else:
+				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.17*par['n_hidden']/par['n_input']))))
+			par['W_in_const'][:,i:i+2] = y[:,np.newaxis]
+	
+		par['W_in_init'] = 0.2*par['W_in_const']
+		par['W_in_mask'] = np.ones_like(par['W_in_mask'])
 
 
 def update_parameters(updates):
@@ -101,77 +154,53 @@ def update_dependencies():
 	+ par['num_fix_tuned'] + par['num_rule_tuned']
 	par['n_EI'] = int(par['n_hidden']*par['EI_prop'])
 
-	# Network initializations
-	par['h_init_init']  = np.zeros([1,par['n_hidden']])
-
-	par['W_in_init']	= np.random.gamma(par['input_gamma'],  scale=1.0, size=[par['n_input'],  par['n_hidden']])
-	par['W_in_mask']	= np.ones([par['n_input'],par['n_hidden']])
-	par['W_in_mask'][:,0::4] = 0.
-	par['W_in_mask'][:,1::2] = 0.
-	par['W_in_mask'][:,2::4] = 0.
-
-
-	# par['W_out_init']	= np.random.gamma(par['output_gamma'], scale=1.0, size=[par['n_hidden'], par['n_output']])
-	par['W_out_init']	= np.random.uniform(-par['output_gamma'], par['output_gamma'], size=[par['n_hidden'], par['n_output']])
-
-	if par['EI_prop'] == 1.:
-		par['W_rnn_init'] = np.random.uniform(-par['rnn_gamma'], par['rnn_gamma'], size=[par['n_hidden'],par['n_hidden']])
-	else:
-		par['W_rnn_init'] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=[par['n_hidden'], par['n_hidden']])
-		# par['W_rnn_init'] = np.random.uniform(0, par['rnn_gamma'], size=[par['n_hidden'],par['n_hidden']])
-		if par['balance_EI']:
-			par['W_rnn_init'][par['n_EI']:,:par['n_EI']] *= 2
-			par['W_rnn_init'][:par['n_EI'],par['n_EI']:] *= 2
-		# par['W_rnn_init'] = np.random.uniform(0, par['rnn_gamma'], size=[par['n_hidden'],par['n_hidden']])
-
-	#par['W_rnn_init'] += 0.5*par['W_rnn_init'].T
-
-	par['b_rnn_init']   = np.zeros([1, par['n_hidden']])
-	par['b_out_init']   = np.zeros([1, par['n_output']])
-
-	par['W_rnn_mask']   = 1 - np.eye(par['n_hidden'])
-	par['W_rnn_init']  *= par['W_rnn_mask']
-
-	par['EI_vector']    = np.ones(par['n_hidden'])
+	# Generate EI vector and matrix
+	par['EI_vector'] = np.ones(par['n_hidden'])
 	par['EI_vector'][par['n_EI']:] *= -1
-	par['EI_mask']      = np.diag(par['EI_vector'])
+	par['EI_matrix'] = np.diag(par['EI_vector'])
 
-	par['dt_sec']       = par['dt']/1000
-	par['alpha_neuron'] = par['dt']/par['membrane_constant']
-	par['beta_neuron']  = par['dt']/par['output_constant']
-	par['noise_rnn']    = np.sqrt(2*par['alpha_neuron'])*par['noise_rnn_sd']
-	par['noise_in']     = np.sqrt(2/par['alpha_neuron'])*par['noise_rnn_sd']
+	# Initialize weights and generate the associated masks
+	make_weights_and_masks()
 
+	# Generate latency indices
 	if par['latency'] is None:
 		par['latency_inds'] = 0
 	else:
-		par['latency_inds'] = np.random.randint(*par['latency'], size=par['n_hidden'])
+		latency_dt = [int(p//par['dt']) for p in par['latency']]
+		if latency_dt[0] == latency_dt[1]:
+			latency_dt[1] += 1
 
-	### LIF spiking (max 40-50 Hz; 10-20 Hz for preferred dir)
+		par['latency_inds'] = np.random.randint(*latency_dt, size=par['n_hidden'])
 
-	if not par['train_input_weights']:
-		# import matplotlib.pyplot as plt
-		# fig, ax = plt.subplots(2,1)
-		# ax[0].imshow(par['W_in_init'],aspect='auto')
+	# Generate time constants and noise values
+	par['dt_sec']       = par['dt']/1000
+	par['alpha_neuron'] = par['dt']/par['tau_hid']
+	par['noise_in']     = np.sqrt(2/par['alpha_neuron'])*par['noise_in_sd']
 
-		par['W_in_const'] = np.zeros((par['n_input'], par['n_hidden']))
-		U = np.linspace(0, 360, par['n_input'])
+	### STP
+	if par['use_stp']:
 
-		beta = 0.2
-		kappa = 7.
-		z = beta/np.exp(kappa)
-		for i in range(0, par['n_hidden'], 2):
-			if i < par['n_EI']:
-				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.2*par['n_hidden']/par['n_input']))))
-			else:
-				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.8*par['n_hidden']/par['n_input']))))
-			par['W_in_const'][:,i] = y
-		par['W_in_init'] = 0.2*par['W_in_const']
+		par['alpha_stf'] = np.ones([1,par['n_hidden']])
+		par['alpha_std'] = np.ones([1,par['n_hidden']])
+		par['U']         = np.ones([1,par['n_hidden']])
 
-		# ax[1].imshow(par['W_in_const'],aspect='auto')
-		# plt.show()
+		par['syn_x_init'] = np.zeros([1,par['n_hidden']])
+		par['syn_u_init'] = np.zeros([1,par['n_hidden']])
 
+		for i in range(0,par['n_hidden'],2):
+			par['alpha_stf'][:,i] = par['dt']/par['tau_slow']
+			par['alpha_std'][:,i] = par['dt']/par['tau_fast']
+			par['U'][:,i] = 0.15
+			par['syn_x_init'][:,i] = 1
+			par['syn_u_init'][:,i] = par['U'][:,i]
 
+			par['alpha_stf'][:,i+1] = par['dt']/par['tau_fast']
+			par['alpha_std'][:,i+1] = par['dt']/par['tau_slow']
+			par['U'][:,i+1] = 0.45
+			par['syn_x_init'][:,i+1] = 1
+			par['syn_u_init'][:,i+1] = par['U'][:,i+1]
+
+	# Spiking algorithms
 	par['adex'] = {}
 	par['lif'] = {}
 
@@ -199,14 +228,10 @@ def update_dependencies():
 		# par['adex'] = par['RS']
 		par['adex']['Vth'] = 0.
 		par['adex']['dt']  = par['dt']/1000
-		par['w_init'] = par['adex']['b']
-		par['adex']['current_divider'] = par['current_divider']
+		par['w_init']      = par['adex']['b']
 
-		par['tau_i'] = 20e-3
-		par['adex']['beta']	= np.exp(-par['dt_sec']/par['tau_i'])
-
-		par['tau_o'] = 20e-3
-		par['adex']['kappa'] = np.exp(-par['dt_sec']/par['tau_o'])
+		par['adex']['beta']  = np.exp(-par['dt']/par['tau_hid'])
+		par['adex']['kappa'] = np.exp(-par['dt']/par['tau_out'])
 
 
 	elif par['cell_type'] == 'lif':
@@ -221,6 +246,7 @@ def update_dependencies():
 		par['lif']['alpha'] = np.exp(-par['dt_sec']/par['lif']['tau_m'])
 		par['lif']['rho']   = np.exp(-par['dt_sec']/par['lif']['tau_a'])
 		par['lif']['kappa']	= np.exp(-par['dt_sec']/par['lif']['tau_o'])
+
 
 update_dependencies()
 print('--> Parameters loaded.\n')
