@@ -4,8 +4,9 @@ import pickle
 import itertools
 
 # Plotting
-import matplotlib
-matplotlib.use('Agg')
+if len(sys.argv) > 1:
+	import matplotlib
+	matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 
 # Numerical processing

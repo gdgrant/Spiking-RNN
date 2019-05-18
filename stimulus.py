@@ -81,6 +81,7 @@ class Stimulus:
 		match = np.random.choice([True, False], p=[1-p_nonmatch,p_nonmatch], size=par['batch_size'])
 		test_direction = np.where(match, sample_direction, test_direction)
 		match = np.where(test_direction==sample_direction, True, match)
+		trial_info['match'] = match
 		
 		if par['fixation_on']:
 			trial_info['neural_input'][:end_delay_time,:,par['num_motion_tuned']:par['num_motion_tuned']+par['num_fix_tuned']] += self.fix_tuning[np.newaxis,:,0]
@@ -124,6 +125,7 @@ class Stimulus:
 		test_category    = test_direction//int(par['num_motion_dirs']/2)
 
 		match = sample_category == test_category
+		trial_info['match'] = match
 
 		if par['fixation_on']:
 			trial_info['neural_input'][:end_delay_time,:,par['num_motion_tuned']:par['num_motion_tuned']+par['num_fix_tuned']] += self.fix_tuning[np.newaxis,:,0]
@@ -166,6 +168,8 @@ class Stimulus:
 			trial_info['neural_input'][:end_delay_time,:,par['num_motion_tuned']:par['num_motion_tuned']+par['num_fix_tuned']] += self.fix_tuning[np.newaxis,:,0]
 
 		output_neuron = np.where(sample_direction < 4, 1, 2)
+		trial_info['match'] = (output_neuron - 1).astype(np.bool)
+
 		trial_info['desired_output'][end_dead_time:end_delay_time,:,0] = 1.
 		trial_info['desired_output'][end_delay_time:end_test_time,np.arange(par['batch_size']),output_neuron] = 1.
 
