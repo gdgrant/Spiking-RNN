@@ -75,13 +75,13 @@ class Model:
 		self.eps['inp'] = {}
 		self.eps['rec'] = {}
 		for s in self.state_names:
-			self.eps['inp'][s] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
+			self.eps['inp'][s] = cp.zeros([par['batch_size'], par['n_input'], par['n_hidden']])
 			self.eps['rec'][s] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
 
 		self.kappa = {}
-		self.kappa['inp'] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_input']])
+		self.kappa['inp'] = cp.zeros([par['batch_size'], par['n_input'], par['n_hidden']])
 		self.kappa['rec'] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
-		self.kappa['out'] = cp.zeros([par['batch_size'], par['n_hidden']])
+		self.kappa['out'] = cp.zeros([par['batch_size'], par['n_hidden'], 1])
 
 
 	def zero_state(self):
@@ -105,7 +105,7 @@ class Model:
 		self.eff_var = {}
 
 		# Send input and output weights to effective variables
-		self.eff_var['W_in'] = self.var_dict['W_in']
+		self.eff_var['W_in']  = self.var_dict['W_in']
 		self.eff_var['W_out'] = self.var_dict['W_out']
 		self.eff_var['b_out'] = self.var_dict['b_out']
 
@@ -119,7 +119,6 @@ class Model:
 		# to ensure correct conductance regime
 		for k in self.eff_var.keys():
 			self.eff_var[k] *= self.con_dict[k+'_mask']
-			self.eff_var[k] /= par['current_divider']
 
 
 	def run_model(self, trial_info):
@@ -137,7 +136,7 @@ class Model:
 
 		# Establish variable rules
 		self.apply_variable_rules()
-		
+
 		# Clear gradients and epsilons
 		self.zero_state()
 
@@ -147,24 +146,18 @@ class Model:
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
 
 		# Initialize cell states
-		if par['cell_type'] == 'lif':
-			state = 0. * self.size_ref
-			adapt = 1. * self.size_ref
-			raise Exception('No cell or eligibility available for LIF.')
-
-		elif par['cell_type'] == 'adex':
-			state = self.con_dict['adex']['V_r'] * self.size_ref
-			adapt = self.con_dict['w_init'] * self.size_ref
-
-			cell  = self.AdEx_recurrent_cell
-			epsi  = self.AdEx_update_eligibility
+		state = self.con_dict['adex']['V_r'] * self.size_ref
+		adapt = self.con_dict['w_init'] * self.size_ref
 
 		# Initialize input trace
-		trace = 0. * self.size_ref
+		trace = { \
+			'inp' : cp.zeros([par['batch_size'], par['n_input'], par['n_hidden']]), \
+			'rec' : cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
+		}
 
 		# Initialize synaptic plasticity
-		syn_x = self.con_dict['syn_x_init'] if par['use_stp'] else 1.
-		syn_u = self.con_dict['syn_u_init'] if par['use_stp'] else 1.
+		syn_x = {'inp' : cp.array(1.), 'rec' : self.con_dict['syn_x_init'] if par['use_stp'] else 1.}
+		syn_u = {'inp' : cp.array(1.), 'rec' : self.con_dict['syn_u_init'] if par['use_stp'] else 1.}
 
 		# Make state dictionary
 		state_dict = {'v':state, 'w':adapt, 'i':trace, 'sx':syn_x, 'su':syn_u}
@@ -174,41 +167,45 @@ class Model:
 
 			# Get input spiking data
 			x = self.input_data[t,...]
-			
+
 			# Get recurrent spikes from par['latency'] time steps ago
 			neuron_inds = np.arange(par['n_hidden']).astype(np.int64)
 			latency_z = self.z[t-(1+par['latency_inds']),:,neuron_inds].T
 
 			# Run cell step
 			self.z[t,...], self.y[t,...], h, state_dict = \
-				cell(x, latency_z, self.y[t-1,...], state_dict)
+				self.recurrent_cell(x, latency_z, self.y[t-1,...], state_dict)
 
 			# Record membrane voltage
 			self.v[t,...] = state_dict['v']
 
 			# Update eligibilities and traces
-			epsi(x, self.z[t,...], latency_z, state_dict, h, t)
+			self.update_eligibility(x, self.z[t,...], latency_z, state_dict, h, t)
 
 			# Update pending weight changes
 			self.calculate_weight_updates(t)
 
 
-	def AdEx_recurrent_cell(self, x, z_i, y, st):
+	def recurrent_cell(self, x, z_i, y, st):
+		""" Compute one iteration of the recurrent network, progressing the
+			internal state by one time step. """
 
-		# Calculate presynaptic activity
-		presyn = x @ self.eff_var['W_in'] + z_i @ self.eff_var['W_rnn']
+		# Sum the input currents into shape [batch x postsynaptic]
+		I = cp.sum(st['i']['inp'], axis=1) + cp.sum(st['i']['rec'], axis=1)
 
-		# Update AdEx cell states (input current is 'i', the input trace)
-		st['v'], st['w'], z_j = \
-			run_adex(st['v'], st['w'], st['i'], self.con_dict['adex'])
+		# Update the AdEx cell state with the input current
+		st['v'], st['w'], z_j = run_adex(st['v'], st['w'], I, self.con_dict['adex'])
 
-		# Update input trace based on incoming spikes
-		st['i'] = self.con_dict['adex']['beta'] * st['i'] \
-			+ st['sx'] * st['su'] * presyn
+		# Update the input traces based on presynaptic spikes
+		st['i']['inp'] = self.con_dict['adex']['beta'] * st['i']['inp'] + \
+			(1-self.con_dict['adex']['beta']) * self.eff_var['W_in'] * st['sx']['inp'] * st['su']['inp'] * x[:,:,cp.newaxis]
+		st['i']['rec'] = self.con_dict['adex']['beta'] * st['i']['rec'] + \
+			(1-self.con_dict['adex']['beta']) * self.eff_var['W_rnn'] * st['sx']['rec'] * st['su']['rec'] * z_i[:,:,cp.newaxis]
 
-		# Update synaptic plasticity
-		st['sx'], st['su'] = synaptic_plasticity(st['sx'], st['su'], presyn, self.con_dict, par['use_stp'])
-
+		# Update the synaptic plasticity state (recurrent only; input is static)
+		st['sx']['rec'], st['su']['rec'] = \
+			synaptic_plasticity(st['sx']['rec'], st['su']['rec'], z_i[:,:,cp.newaxis], self.con_dict, par['use_stp'])
+		
 		# Update output trace based on postsynaptic cell state (Eq. 12)
 		y = self.con_dict['adex']['kappa'] * y + z_j @ self.eff_var['W_out'] + self.eff_var['b_out']
 
@@ -219,38 +216,40 @@ class Model:
 		return z_j, y, h, st
 
 
-	def AdEx_update_eligibility(self, x, z, z_prev, state_dict, h, t):
+	def update_eligibility(self, x, z, z_prev, state_dict, h, t):
 
 		# Calculate the model dynamics and generate new epsilons
 		self.eps = calculate_dynamics(self.eps, x, z, z_prev, state_dict, h, \
 			self.con_dict, self.eff_var)
 
 		# Update and modulate e's
-		e_inp = h[...,cp.newaxis] * self.eps['inp']['v']
-		e_rec = h[...,cp.newaxis] * self.eps['rec']['v']
-		e_out = z
+		e_inp = h[:,cp.newaxis,:] * self.eps['inp']['v']
+		e_rec = h[:,cp.newaxis,:] * self.eps['rec']['v']
+		e_out = z[:,:,cp.newaxis]
 
 		# Increment kappa arrays forward in time (Eq. 42-45, k^(t-t') terms)
 		self.kappa['inp'] = self.con_dict['adex']['kappa']*self.kappa['inp'] + e_inp
 		self.kappa['rec'] = self.con_dict['adex']['kappa']*self.kappa['rec'] + e_rec
 		self.kappa['out'] = self.con_dict['adex']['kappa']*self.kappa['out'] + e_out
 
+
 	def calculate_weight_updates(self, t):
 
 		# Calculate output error
 		output_error = self.output_mask[t,:,cp.newaxis] * (self.output_data[t] - softmax(self.y[t]))
 
-		# Calculate learning signals per layer (Eq. 4)
-		L_hid = cp.sum(self.eff_var['W_out'].T[cp.newaxis,...] * output_error[...,cp.newaxis], axis=1) \
-			- par['L_spike_cost']*cp.mean(self.z[t], axis=[1], keepdims=True)
+		L_hid = cp.sum(self.eff_var['W_out'][cp.newaxis,:,:] * output_error[:,cp.newaxis,:], axis=2)
 		L_out = output_error
+
+		# Spiking penalty
+		# - cp.mean(self.eff_var['W_out'])*par['L_spike_cost']*cp.mean(self.z[t], axis=[1], keepdims=True)
 
 		### Update pending weight changes
 		if par['train_input_weights']:
-			self.grad_dict['W_in']  += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa['inp'], axis=0).T
-		self.grad_dict['W_rnn'] += cp.mean(L_hid[:,:,cp.newaxis] * self.kappa['rec'], axis=0).T
-		self.grad_dict['W_out'] += cp.mean(L_out[:,:,cp.newaxis] * self.kappa['out'][:,cp.newaxis,:], axis=0).T
-		self.grad_dict['b_out'] += cp.mean(L_out[:,:,cp.newaxis], axis=0).T
+			self.grad_dict['W_in'] += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['inp'], axis=0)
+		self.grad_dict['W_rnn']    += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['rec'], axis=0)
+		self.grad_dict['W_out']    += cp.mean(L_out[:,cp.newaxis,:] * self.kappa['out'], axis=0)
+		self.grad_dict['b_out']    += cp.mean(L_out[:,cp.newaxis,:], axis=0)
 
 
 	def optimize(self):
@@ -310,17 +309,13 @@ class Model:
 def main():
 
 	# Start the model run by loading the network controller and stimulus
-	print('\nStarting model run: {}'.format(par['cell_type']))
-	print('Task type: {}'.format(par['task']))
-
+	print('\nLoading model...')
 	model = Model()
 	stim  = Stimulus()
 
-	# Establish records for training loop
-	save_record = {'iter':[], 'mean_task_acc':[], 'mean_full_acc':[], 'top_task_acc':[], \
-		'top_full_acc':[], 'loss':[], 'mut_str':[], 'spiking':[], 'loss_factors':[]}
-
 	t0 = time.time()
+	print('Starting training.\n')
+
 	# Run the training loop
 	for i in range(par['iterations']):
 
@@ -333,10 +328,13 @@ def main():
 		task_accuracy, full_accuracy = model.get_performance()
 
 		info_str0 = 'Iter {:>5} | Task Loss: {:5.3f} | Task Acc: {:5.3f} | '.format(\
-			i, losses['task'], task_accuracy, full_accuracy)
-		info_str1 = 'Full Acc: {:5.3f} | Mean Spiking: {:6.3f} Hz'.format(\
-			full_accuracy, mean_spiking)
+			i, losses['task'], task_accuracy)
+		info_str1 = 'Mean RNN Grad Mag: {:10.3e} | Full Acc: {:5.3f} | Mean Spiking: {:5.3f} Hz'.format(\
+			to_cpu(cp.mean(cp.abs(model.grad_dict['W_rnn']))), full_accuracy, mean_spiking)
 		print(info_str0 + info_str1)
+
+		# for n, g in model.grad_dict.items():
+		# 	print(n, '|', g.min(), cp.mean(g), g.max(), '|', cp.std(g))
 
 		V_min = to_cpu(model.v[:,0,:].T.min())
 
@@ -344,7 +342,7 @@ def main():
 			fig, ax = plt.subplots(4,1, figsize=(15,11), sharex=True)
 			ax[0].imshow(to_cpu(model.input_data[:,0,:].T), aspect='auto')
 			ax[0].set_title('Input Data')
-			ax[1].imshow(to_cpu((model.input_data[:,0,:] @ model.var_dict['W_in']).T), aspect='auto')
+			ax[1].imshow(to_cpu((model.input_data[:,0,:] @ model.eff_var['W_in']).T), aspect='auto')
 			ax[1].set_title('Projected Inputs')
 			ax[2].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
 			ax[2].set_title('Spiking')

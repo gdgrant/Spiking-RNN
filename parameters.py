@@ -15,14 +15,14 @@ par = {
 	# Training environment
 	'batch_size'              : 64,
 	'iterations'              : 100000,
-	'learning_rate'           : 1e-5,
+	'learning_rate'           : 1e-12,
 	'cell_type'               : 'adex',
 	'optimizer'               : 'adam',
 
 	# Optimization parameters
 	'gamma_psd'               : 0.3,
-	'L_spike_cost'            : 0.001,
-	'train_input_weights'     : False,
+	'L_spike_cost'            : 10.,
+	'train_input_weights'     : True,
 	'pseudo_th'               : 10e-3,
 
 	# Model architecture
@@ -35,7 +35,7 @@ par = {
 	'num_fix_tuned'           : 8,
 	'num_rule_tuned'          : 0,
 	'num_receptive_fields'    : 1,
-	'n_hidden'                : 1000,
+	'n_hidden'                : 500,
 	'n_output'                : 3,
 
 	# Timing constants (all in ms)
@@ -47,7 +47,7 @@ par = {
 	# AdEx architecture
 	'exc_model'               : 'RS',
 	'inh_model'               : 'cNA',
-	'current_divider'         : 1e9,
+	'conductance_mult'        : 80e-12,
 
 	# Synaptic plasticity setup
 	'tau_fast'                : 200,
@@ -61,8 +61,8 @@ par = {
 	'adam_epsilon'            : 1e-8,
 
 	# Noise and weight scaling
-	'input_gamma'             : 0.003,
-	'rnn_gamma'               : 0.01,
+	'input_gamma'             : 0.3,
+	'rnn_gamma'               : 0.1,
 	'output_gamma'            : 0.01,
 	'rnn_cap'                 : 0.006,
 	'noise_in_sd'             : 0.5,
@@ -80,7 +80,7 @@ par = {
     'dead_time'               : 20,
 	'fix_time'                : 30,
 	'sample_time'             : 100,
-	'delay_time'              : 200,
+	'delay_time'              : 60,
 	'test_time'               : 150,
 	'mask_time'               : 40,
 
@@ -96,7 +96,7 @@ def make_weights_and_masks():
 	par['W_in_mask'][:,0:par['n_EI']:3] = 1.
 
 	# Make W_out and mask
-	par['W_out_init'] = np.random.uniform(-par['output_gamma'], par['output_gamma'], size=[par['n_hidden'], par['n_output']])
+	par['W_out_init'] = np.random.uniform(-1., 1., size=[par['n_hidden'], par['n_output']])
 	par['W_out_mask'] = np.ones_like(par['W_out_init'])
 
 	# Make b_out and mask
@@ -115,6 +115,10 @@ def make_weights_and_masks():
 	par['W_rnn_mask']   = 1 - np.eye(par['n_hidden'])
 	par['W_rnn_init']  *= par['W_rnn_mask']
 
+	par['W_in_init'] *= par['conductance_mult']
+	par['W_rnn_init'] *= par['conductance_mult']
+	# par['W_out_init'] *= par['conductance_mult']
+
 	# Remake W_in and mask if weight won't be trained
 	if not par['train_input_weights']:
 
@@ -131,7 +135,7 @@ def make_weights_and_masks():
 				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.17*par['n_hidden']/par['n_input']))))
 			par['W_in_const'][:,i:i+2] = y[:,np.newaxis]
 	
-		par['W_in_init'] = 0.2*par['W_in_const']
+		par['W_in_init'] = 20*par['conductance_mult']*par['W_in_const']
 		par['W_in_mask'] = np.ones_like(par['W_in_mask'])
 
 
@@ -180,25 +184,25 @@ def update_dependencies():
 	### STP
 	if par['use_stp']:
 
-		par['alpha_stf'] = np.ones([1,par['n_hidden']])
-		par['alpha_std'] = np.ones([1,par['n_hidden']])
-		par['U']         = np.ones([1,par['n_hidden']])
+		par['alpha_stf'] = np.ones([1,par['n_hidden'],1])
+		par['alpha_std'] = np.ones([1,par['n_hidden'],1])
+		par['U']         = np.ones([1,par['n_hidden'],1])
 
-		par['syn_x_init'] = np.zeros([1,par['n_hidden']])
-		par['syn_u_init'] = np.zeros([1,par['n_hidden']])
+		par['syn_x_init'] = np.zeros([par['batch_size'],par['n_hidden'],1])
+		par['syn_u_init'] = np.zeros([par['batch_size'],par['n_hidden'],1])
 
 		for i in range(0,par['n_hidden'],2):
-			par['alpha_stf'][:,i] = par['dt']/par['tau_slow']
-			par['alpha_std'][:,i] = par['dt']/par['tau_fast']
-			par['U'][:,i] = 0.15
-			par['syn_x_init'][:,i] = 1
-			par['syn_u_init'][:,i] = par['U'][:,i]
+			par['alpha_stf'][:,i,:] = par['dt']/par['tau_slow']
+			par['alpha_std'][:,i,:] = par['dt']/par['tau_fast']
+			par['U'][:,i,:] = 0.15
+			par['syn_x_init'][:,i,:] = 1
+			par['syn_u_init'][:,i,:] = par['U'][:,i]
 
-			par['alpha_stf'][:,i+1] = par['dt']/par['tau_fast']
-			par['alpha_std'][:,i+1] = par['dt']/par['tau_slow']
-			par['U'][:,i+1] = 0.45
-			par['syn_x_init'][:,i+1] = 1
-			par['syn_u_init'][:,i+1] = par['U'][:,i+1]
+			par['alpha_stf'][:,i+1,:] = par['dt']/par['tau_fast']
+			par['alpha_std'][:,i+1,:] = par['dt']/par['tau_slow']
+			par['U'][:,i+1,:] = 0.45
+			par['syn_x_init'][:,i+1,:] = 1
+			par['syn_u_init'][:,i+1,:] = par['U'][:,i+1,:]
 
 	# Spiking algorithms
 	par['adex'] = {}

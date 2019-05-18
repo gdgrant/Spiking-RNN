@@ -1,0 +1,15 @@
+
+--- Training Recurrent Spiking Neural Networks
+--- Using e-prop 1 optimization
+--- Using an input current trace
+--- Using synaptic plasticity
+
+Conventions:
+ - All time constants are in milliseconds
+ - Time-major indexing
+ - (Presynaptic -> Postsynaptic) indexing
+
+Master Dimensionality Template:
+[time x batch x presynaptic x postsynaptic]
+(alternatively, [t,b,i,j])
+

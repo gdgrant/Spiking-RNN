@@ -3,6 +3,7 @@ from imports import *
 
 ### Adaptive-Exponential spiking model
 
+
 def run_adex(V, w, I, constants):
 	""" Run one step of the AdEx algorithm """
 
