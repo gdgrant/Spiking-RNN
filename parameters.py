@@ -10,7 +10,7 @@ par = {
 	
 	# File context
 	'save_dir'                : './savedir/',
-	'savefn'                  : 'testing',
+	'savefn'                  : 'rate1em12_cond100em12_500neuron_60delay',
 
 	# Training environment
 	'batch_size'              : 64,
@@ -47,7 +47,7 @@ par = {
 	# AdEx architecture
 	'exc_model'               : 'RS',
 	'inh_model'               : 'cNA',
-	'conductance_mult'        : 80e-12,
+	'conductance_mult'        : 100e-12,
 
 	# Synaptic plasticity setup
 	'tau_fast'                : 200,
@@ -61,8 +61,8 @@ par = {
 	'adam_epsilon'            : 1e-8,
 
 	# Noise and weight scaling
-	'input_gamma'             : 0.3,
-	'rnn_gamma'               : 0.1,
+	'input_gamma'             : 0.5,
+	'rnn_gamma'               : 0.3,
 	'output_gamma'            : 0.01,
 	'rnn_cap'                 : 0.006,
 	'noise_in_sd'             : 0.5,
@@ -140,6 +140,7 @@ def make_weights_and_masks():
 
 
 def update_parameters(updates):
+	print('\n--- Updates ----------------')
 	for k in updates.keys():
 		print(k.ljust(24), ': {}'.format(updates[k]))
 		par[k] = updates[k]

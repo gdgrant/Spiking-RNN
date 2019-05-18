@@ -1,6 +1,6 @@
 from imports import *
 from model import main
-from parameters import par, update_dependencies
+from parameters import par, update_parameters
 
 def print_parameters():
 
@@ -15,6 +15,9 @@ def print_parameters():
 		print(k.ljust(30), par[k])
 	print('-'*60)
 
-
-print_parameters()
-main()
+delay = 120
+for j in range(5):
+	savefn = 'rate1em12_cond100em12_500neuron_{}delay_v{}'.format(delay, j)
+	update_parameters({'savefn':savefn, 'delay_time':delay, 'iterations':2000})
+	print_parameters()
+	main()

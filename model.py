@@ -139,10 +139,12 @@ class Model:
 		# Clear gradients and epsilons
 		self.zero_state()
 
-		# Establish voltage, spike, and output recording
+		# Establish voltage, spike, output, and efficacy recording
 		self.v = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
+		self.syn_x = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
+		self.syn_u = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 
 		# Initialize cell states
 		state = self.con_dict['adex']['V_r'] * self.size_ref
@@ -177,6 +179,10 @@ class Model:
 
 			# Record membrane voltage
 			self.v[t,...] = state_dict['v']
+
+			# Record synaptic efficacies
+			self.syn_x[t,...] = cp.squeeze(state_dict['sx']['rec'])
+			self.syn_u[t,...] = cp.squeeze(state_dict['su']['rec'])
 
 			# Update eligibilities and traces
 			self.update_eligibility(x, self.z[t,...], latency_z, state_dict, h, t)
@@ -300,12 +306,13 @@ class Model:
 			ax[0].set_title('Gradient')
 			ax[1].set_title('Variable')
 			
-			plt.savefig('./savedir/{}_delta_{}_iter{}.png'.format(par['savefn'], n, i), bbox_inches='tight')
+			plt.savefig('./savedir/{}_delta_{}_iter{:0>6}.png'.format(par['savefn'], n, i), bbox_inches='tight')
+			plt.savefig('./savedir/{}_delta_{}_iter{:0>6}.pdf'.format(par['savefn'], n, i), bbox_inches='tight')
 			plt.clf()
 			plt.close()
 
 
-	def show_output_behavior(self, i, match_info):
+	def show_output_behavior(self, it, match_info):
 
 		match = np.where(match_info)[0]
 		nonmatch = np.where(np.logical_not(match_info))[0]
@@ -338,15 +345,16 @@ class Model:
 			ax[i].legend(loc="upper left")
 		
 		fig.suptitle('Output Neuron Behavior')
-		ax[0].set_title('Match Trials')
-		ax[1].set_title('Non-Match Trials')
+		ax[0].set_title('Cat. 1 / Match Trials')
+		ax[1].set_title('Cat. 2 / Non-Match Trials')
 
 		ax[0].set_ylabel('Mean Response')
 		ax[1].set_ylabel('Mean Response')
 		ax[1].set_xlim(time.min(), time.max())
 		ax[1].set_xlabel('Time')
 
-		plt.savefig('./savedir/{}_outputs_iter{}.png'.format(par['savefn'], i), bbox_inches='tight')
+		plt.savefig('./savedir/{}_outputs_iter{:0>6}.png'.format(par['savefn'], it), bbox_inches='tight')
+		plt.savefig('./savedir/{}_outputs_iter{:0>6}.pdf'.format(par['savefn'], it), bbox_inches='tight')
 		plt.clf()
 		plt.close()
 
@@ -361,6 +369,10 @@ def main():
 	t0 = time.time()
 	print('Starting training.\n')
 
+	full_acc_record = []
+	task_acc_record = []
+	iter_record = []
+
 	# Run the training loop
 	for i in range(par['iterations']):
 
@@ -373,14 +385,15 @@ def main():
 		mean_spiking = model.get_mean_spiking()
 		task_accuracy, full_accuracy = model.get_performance()
 
+		full_acc_record.append(full_accuracy)
+		task_acc_record.append(task_accuracy)
+		iter_record.append(i)
+
 		info_str0 = 'Iter {:>5} | Task Loss: {:5.3f} | Task Acc: {:5.3f} | '.format(\
 			i, losses['task'], task_accuracy)
 		info_str1 = 'Mean RNN Grad Mag: {:10.3e} | Full Acc: {:5.3f} | Mean Spiking: {:5.3f} Hz'.format(\
 			to_cpu(cp.mean(cp.abs(model.grad_dict['W_rnn']))), full_accuracy, mean_spiking)
-		print(info_str0 + info_str1)
-
-		# for n, g in model.grad_dict.items():
-		# 	print(n, '|', g.min(), cp.mean(g), g.max(), '|', cp.std(g))
+		print('Aggregating data...', end='\r')
 
 		V_min = to_cpu(model.v[:,0,:].T.min())
 
@@ -400,14 +413,52 @@ def main():
 			ax[2].set_ylabel('Hidden Neuron')
 			ax[3].set_ylabel('Hidden Neuron')
 
-			plt.savefig('./savedir/{}_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
+			plt.savefig('./savedir/{}_activity_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
+			plt.savefig('./savedir/{}_activity_iter{:0>6}.pdf'.format(par['savefn'], i), bbox_inches='tight')
 			plt.clf()
 			plt.close()
 
 
+			if i != 0:
+				fig, ax = plt.subplots(1,1, figsize=(8,8))
+				ax.plot(iter_record, full_acc_record, label='Full Accuracy')
+				ax.plot(iter_record, task_acc_record, label='Match/Nonmatch Accuracy')
+				ax.axhline(0.5, c='k', ls='--', label='Match/Nonmatch Chance Level')
+				ax.legend(loc='upper left')
+				ax.set_xlabel('Iteration')
+				ax.set_ylabel('Accuracy')
+				ax.set_title('Accuracy Training Curve')
+				ax.set_ylim(0,1)
+				ax.set_xlim(0,i)
+				ax.grid()
+
+				plt.savefig('./savedir/{}_training_curve_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
+				plt.savefig('./savedir/{}_training_curve_iter{:0>6}.pdf'.format(par['savefn'], i), bbox_inches='tight')
+				plt.clf()
+				plt.close()
+
+
 		if i%50 == 0:
-			model.visualize_delta(i)
 			model.show_output_behavior(i, trial_info['match'])
+
+		if i%100 == 0:
+			model.visualize_delta(i)
+
+			data = {
+				'par'			: par,
+				'trial_info'	: trial_info,
+				'weights'		: to_cpu(model.var_dict),
+				'spiking'		: to_cpu(model.z),
+				'voltage'		: to_cpu(model.v),
+				'output'		: to_cpu(model.y),
+				'syn_x'			: to_cpu(model.syn_x),
+				'syn_u'			: to_cpu(model.syn_u)
+			}
+
+			pickle.dump(data, open('./savedir/{}_data_iter{:0>6}.pkl'.format(par['savefn'], i), 'wb'))
+
+		# Print output info
+		print(info_str0 + info_str1)
 
 
 if __name__ == '__main__':
