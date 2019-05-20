@@ -243,8 +243,8 @@ class Model:
 			print(h.shape)
 			print(state_dict['su']['rec'].shape)
 			
-	        self.EI_balance_delta = z * h * state_dict['su']['rec'] * state_dict['sx']['rec'] * z[cp.newaxis,:,:] * (1 / (C_over_dt + c['g'][s]*(cp.exp((v-c['V_T'][s])/c['D'][s])-1))) / c['beta']
-	        self.EI_balance_delta = cp.matmul(self.con_dict['EI_matrix'], self.EI_balance_delta)
+			self.EI_balance_delta = z * h * state_dict['su']['rec'] * state_dict['sx']['rec'] * z[cp.newaxis,:,:] * (1 / (C_over_dt + c['g'][s]*(cp.exp((v-c['V_T'][s])/c['D'][s])-1))) / c['beta']
+			self.EI_balance_delta = cp.matmul(self.con_dict['EI_matrix'], self.EI_balance_delta)
 
 	def calculate_weight_updates(self, t):
 
