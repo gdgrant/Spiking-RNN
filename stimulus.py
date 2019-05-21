@@ -8,7 +8,7 @@ class Stimulus:
         self.motion_tuning, self.fix_tuning, self.rule_tuning = self.create_tuning_functions()
 
 
-    def make_batch(self, var_delay=False):
+    def make_batch(self, var_delay=par['var_delay']):
 
         if par['task'] == 'dms':
             trial_info = self.dms()
