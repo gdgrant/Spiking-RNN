@@ -81,7 +81,7 @@ par = {
 
     # Task variable parameters
     'var_delay'               : True,
-    'catch_prob'              : 0.1,
+    'catch_prob'              : 0.,
 
     # Task timings
     'dead_time'               : 20,
@@ -158,6 +158,8 @@ def update_parameters(updates):
 def update_dependencies():
 
     # Var delay parameters
+    par['var_delay_max'] = par['delay_time']
+    par['var_delay_min'] = int(par['var_delay_max']/2)
     par['delay_times'] = np.array([par['delay_time']-20, par['delay_time'], par['delay_time']+20])
 
     # Set up trial length and number of time steps

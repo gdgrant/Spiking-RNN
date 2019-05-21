@@ -27,7 +27,7 @@ class Stimulus:
 
     def make_spiking(self, trial_info):
 
-        do_plots = True
+        do_plots = False
 
         if do_plots:
             import matplotlib.pyplot as plt
@@ -113,7 +113,7 @@ class Stimulus:
         # Select match/nonmatch and catch trials
         sample_direction = np.random.choice(par['num_motion_dirs'], size=par['batch_size'])
         test_direction   = np.random.choice(par['num_motion_dirs'], size=par['batch_size'])
-        catch_trials     = np.random.choice([0,1], size=par['batch_size'], p=[1-par['catch_prob'], par['catch_prob']])
+        catch_trials     = np.random.choice([True,False], size=par['batch_size'], p=[par['catch_prob'], 1-par['catch_prob']])
 
         sample_category  = sample_direction//int(par['num_motion_dirs']/2)
         test_category    = test_direction//int(par['num_motion_dirs']/2)
@@ -130,7 +130,14 @@ class Stimulus:
 
         for t in range(par['batch_size']):
 
-            delay = np.random.choice(par['delay_times'])//par['dt'] if var_delay else par['delay_time']//par['dt']
+            if var_delay:
+                delay = par['var_delay_max'] - int(np.random.exponential(scale=par['var_delay_max']/5))
+                if delay < par['var_delay_min']:
+                    catch_trials[t] = True
+
+                # delay = np.random.choice(par['delay_times'])//par['dt'] if var_delay else par['delay_time']//par['dt']
+            else:
+                delay = par['delay_time']//par['dt']
 
             # Variable trial times
             end_delay_time      = end_sample_time + delay
