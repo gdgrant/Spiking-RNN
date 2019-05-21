@@ -11,6 +11,8 @@ par = {
 	# File context
 	'save_dir'                : './savedir/',
 	'savefn'                  : 'rate1em12_cond100em12_500neuron_60delay',
+	'save_data_files'         : False,
+	'save_pdfs'               : False,
 
 	# Training environment
 	'batch_size'              : 64,
@@ -47,7 +49,7 @@ par = {
 	# AdEx architecture
 	'exc_model'               : 'RS',
 	'inh_model'               : 'cNA',
-	'conductance_mult'        : 100e-12,
+	'conductance_mult'        : 50e-12,
 
 	# Synaptic plasticity setup
 	'tau_fast'                : 200,
@@ -61,9 +63,9 @@ par = {
 	'adam_epsilon'            : 1e-8,
 
 	# Noise and weight scaling
-	'input_gamma'             : 0.5,
-	'rnn_gamma'               : 0.3,
-	'output_gamma'            : 0.01,
+	'input_gamma'             : 0.7,
+	'rnn_gamma'               : 0.8,
+	'output_gamma'            : 0.04,
 	'rnn_cap'                 : 0.006,
 	'noise_in_sd'             : 0.5,
 
@@ -79,7 +81,7 @@ par = {
     # Task timings
     'dead_time'               : 20,
 	'fix_time'                : 30,
-	'sample_time'             : 100,
+	'sample_time'             : 150,
 	'delay_time'              : 60,
 	'test_time'               : 150,
 	'mask_time'               : 40,
@@ -93,7 +95,8 @@ def make_weights_and_masks():
 	par['W_in_init'] = np.random.gamma(par['input_gamma'], \
 		scale=1., size=[par['n_input'], par['n_hidden']])
 	par['W_in_mask'] = np.zeros_like(par['W_in_init'])
-	par['W_in_mask'][:,0:par['n_EI']:3] = 1.
+	par['W_in_mask'][:,0:par['n_EI']:4] = 1.
+	par['W_in_mask'][:,1:par['n_EI']:4] = 1.
 
 	# Make W_out and mask
 	par['W_out_init'] = np.random.uniform(-1., 1., size=[par['n_hidden'], par['n_output']])

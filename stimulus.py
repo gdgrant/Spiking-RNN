@@ -60,7 +60,7 @@ class Stimulus:
 		trial_info = {
 			'neural_input'      : np.random.normal(0., par['noise_in'], size=[par['num_time_steps'], par['batch_size'], par['n_input']]),
 			'desired_output'    : np.zeros([par['num_time_steps'], par['batch_size'], par['n_output']]),
-			'train_mask'        : np.ones([par['num_time_steps'], par['batch_size']])
+			'train_mask'        : np.ones([par['num_time_steps'], par['batch_size']]),
 		}
 
 		end_dead_time       = par['dead_time']//par['dt']
@@ -69,6 +69,8 @@ class Stimulus:
 		end_delay_time      = end_sample_time + par['delay_time']//par['dt']
 		end_mask_time       = end_delay_time + par['mask_time']//par['dt']
 		end_test_time       = end_delay_time + par['test_time']//par['dt']
+
+		trial_info['timings'] = [end_delay_time]
 
 		trial_info['train_mask'][:end_dead_time,...] = 0.
 		trial_info['train_mask'][end_delay_time:end_mask_time,...] = 0.
@@ -114,6 +116,8 @@ class Stimulus:
 		end_mask_time       = end_delay_time + par['mask_time']//par['dt']
 		end_test_time       = end_delay_time + par['test_time']//par['dt']
 
+		trial_info['timings'] = [end_sample_time, end_delay_time]
+
 		trial_info['train_mask'][:end_dead_time,...] = 0.
 		trial_info['train_mask'][end_delay_time:end_mask_time,...] = 0.
 		trial_info['train_mask'][end_mask_time:end_test_time,...] = par['response_multiplier']
@@ -157,6 +161,8 @@ class Stimulus:
 		end_delay_time      = end_sample_time + par['delay_time']//par['dt']
 		end_mask_time       = end_delay_time + par['mask_time']//par['dt']
 		end_test_time       = end_delay_time + par['test_time']//par['dt']
+
+		trial_info['timings'] = [end_sample_time, end_delay_time]
 
 		trial_info['train_mask'][:end_dead_time,...] = 0.
 		trial_info['train_mask'][end_delay_time:end_mask_time,...] = 0.

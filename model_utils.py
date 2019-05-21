@@ -39,8 +39,8 @@ def synaptic_plasticity(syn_x, syn_u, I, c, use_stp):
 	""" Iterate the synaptic plasticity algorithm (if required) """
 
 	if use_stp:
-		syn_x = syn_x + c['alpha_std']*(1-syn_x) - c['dt_sec']*syn_u*syn_x*I
-		syn_u = syn_u + c['alpha_stf']*(c['U']-syn_u) + c['dt_sec']*c['U']*(1-syn_u)*I
+		syn_x = syn_x + c['alpha_std']*(1-syn_x) - c['dt']*syn_u*syn_x*I
+		syn_u = syn_u + c['alpha_stf']*(c['U']-syn_u) + c['dt']*c['U']*(1-syn_u)*I
 		syn_x = cp.clip(syn_x, 0., 1.)
 		syn_u = cp.clip(syn_u, 0., 1.)
 

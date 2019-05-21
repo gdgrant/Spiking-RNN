@@ -17,7 +17,7 @@ def print_parameters():
 
 delay = 120
 for j in range(5):
-	savefn = 'rate1em12_cond100em12_500neuron_{}delay_v{}'.format(delay, j)
-	update_parameters({'savefn':savefn, 'delay_time':delay, 'iterations':2000})
+	savefn = 'saving_500neuron_{}delay_v{}'.format(delay, j)
+	update_parameters({'savefn':savefn, 'delay_time':delay, 'iterations':2000, 'save_data_files':True})
 	print_parameters()
 	main()

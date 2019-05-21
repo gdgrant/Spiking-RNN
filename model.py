@@ -28,7 +28,7 @@ class Model:
 	def init_constants(self):
 		""" Import constants from CPU to GPU """
 
-		constants  = ['dt_sec', 'adex', 'lif', 'w_init']
+		constants  = ['dt', 'dt_sec', 'adex', 'lif', 'w_init']
 		constants += ['EI_vector', 'EI_matrix']
 		constants += ['W_in_mask', 'W_rnn_mask', 'W_out_mask', 'b_out_mask']
 
@@ -295,7 +295,8 @@ class Model:
 
 	def visualize_delta(self, i):
 
-		for n in self.grad_dict.keys():
+		# for n in self.grad_dict.keys():
+		for n in [k for k in self.grad_dict.keys() if 'rnn' in k]:
 			fig, ax = plt.subplots(1,2, figsize=[16,8])
 			im = ax[0].imshow(to_cpu(par['learning_rate']*self.grad_dict[n]), aspect='auto')
 			fig.colorbar(im, ax=ax[0])
@@ -307,12 +308,13 @@ class Model:
 			ax[1].set_title('Variable')
 			
 			plt.savefig('./savedir/{}_delta_{}_iter{:0>6}.png'.format(par['savefn'], n, i), bbox_inches='tight')
-			plt.savefig('./savedir/{}_delta_{}_iter{:0>6}.pdf'.format(par['savefn'], n, i), bbox_inches='tight')
+			if par['save_pdfs']:
+				plt.savefig('./savedir/{}_delta_{}_iter{:0>6}.pdf'.format(par['savefn'], n, i), bbox_inches='tight')
 			plt.clf()
 			plt.close()
 
 
-	def show_output_behavior(self, it, match_info):
+	def show_output_behavior(self, it, match_info, timings):
 
 		match = np.where(match_info)[0]
 		nonmatch = np.where(np.logical_not(match_info))[0]
@@ -343,6 +345,9 @@ class Model:
 			ax[i].plot(time, r[:,2], c=c_res[2], label='Cat. 2 / Non-Match')
 
 			ax[i].legend(loc="upper left")
+
+			for t in timings:
+				ax[i].axvline(t, c='k', ls='--')
 		
 		fig.suptitle('Output Neuron Behavior')
 		ax[0].set_title('Cat. 1 / Match Trials')
@@ -354,7 +359,8 @@ class Model:
 		ax[1].set_xlabel('Time')
 
 		plt.savefig('./savedir/{}_outputs_iter{:0>6}.png'.format(par['savefn'], it), bbox_inches='tight')
-		plt.savefig('./savedir/{}_outputs_iter{:0>6}.pdf'.format(par['savefn'], it), bbox_inches='tight')
+		if par['save_pdfs']:
+			plt.savefig('./savedir/{}_outputs_iter{:0>6}.pdf'.format(par['savefn'], it), bbox_inches='tight')
 		plt.clf()
 		plt.close()
 
@@ -414,7 +420,8 @@ def main():
 			ax[3].set_ylabel('Hidden Neuron')
 
 			plt.savefig('./savedir/{}_activity_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
-			plt.savefig('./savedir/{}_activity_iter{:0>6}.pdf'.format(par['savefn'], i), bbox_inches='tight')
+			if par['save_pdfs']:
+				plt.savefig('./savedir/{}_activity_iter{:0>6}.pdf'.format(par['savefn'], i), bbox_inches='tight')
 			plt.clf()
 			plt.close()
 
@@ -433,29 +440,31 @@ def main():
 				ax.grid()
 
 				plt.savefig('./savedir/{}_training_curve_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
-				plt.savefig('./savedir/{}_training_curve_iter{:0>6}.pdf'.format(par['savefn'], i), bbox_inches='tight')
+				if par['save_pdfs']:
+					plt.savefig('./savedir/{}_training_curve_iter{:0>6}.pdf'.format(par['savefn'], i), bbox_inches='tight')
 				plt.clf()
 				plt.close()
 
 
 		if i%50 == 0:
-			model.show_output_behavior(i, trial_info['match'])
+			model.show_output_behavior(i, trial_info['match'], trial_info['timings'])
 
 		if i%100 == 0:
 			model.visualize_delta(i)
 
-			data = {
-				'par'			: par,
-				'trial_info'	: trial_info,
-				'weights'		: to_cpu(model.var_dict),
-				'spiking'		: to_cpu(model.z),
-				'voltage'		: to_cpu(model.v),
-				'output'		: to_cpu(model.y),
-				'syn_x'			: to_cpu(model.syn_x),
-				'syn_u'			: to_cpu(model.syn_u)
-			}
+			if par['save_data_files']:
+				data = {
+					'par'			: par,
+					'trial_info'	: trial_info,
+					'weights'		: to_cpu(model.var_dict),
+					'spiking'		: to_cpu(model.z),
+					'voltage'		: to_cpu(model.v),
+					'output'		: to_cpu(model.y),
+					'syn_x'			: to_cpu(model.syn_x),
+					'syn_u'			: to_cpu(model.syn_u)
+				}
 
-			pickle.dump(data, open('./savedir/{}_data_iter{:0>6}.pkl'.format(par['savefn'], i), 'wb'))
+				pickle.dump(data, open('./savedir/{}_data_iter{:0>6}.pkl'.format(par['savefn'], i), 'wb'))
 
 		# Print output info
 		print(info_str0 + info_str1)

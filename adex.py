@@ -17,6 +17,7 @@ def run_adex(V, w, I, constants):
 def adex_membrane(V, w, I, c):
 	""" Calculate the new membrane potential """
 
+
 	term1 = I + c['g']*c['D']*cp.exp((V-c['V_T'])/c['D'])
 	term2 = w + c['g']*(V-c['E'])
 	return V + (c['dt']/c['C'])*(term1-term2)
