@@ -31,6 +31,7 @@ par = {
 	'use_stp'                 : True,
 	'EI_prop'                 : 0.8,
 	'balance_EI'              : True,
+	'balance_EI_training'     : True,
 
 	# Network shape
 	'num_motion_tuned'        : 96,

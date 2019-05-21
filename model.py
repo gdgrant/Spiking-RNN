@@ -237,6 +237,14 @@ class Model:
 		self.kappa['rec'] = self.con_dict['adex']['kappa']*self.kappa['rec'] + e_rec
 		self.kappa['out'] = self.con_dict['adex']['kappa']*self.kappa['out'] + e_out
 
+		# EI balance
+		if par['balance_EI_training']:
+			print(z.shape)
+			print(h.shape)
+			print(state_dict['su']['rec'].shape)
+			
+			self.EI_balance_delta = z * h * state_dict['su']['rec'] * state_dict['sx']['rec'] * z[cp.newaxis,:,:] * (1 / (C_over_dt + c['g'][s]*(cp.exp((v-c['V_T'][s])/c['D'][s])-1))) / c['beta']
+			self.EI_balance_delta = cp.matmul(self.con_dict['EI_matrix'], self.EI_balance_delta)
 
 	def calculate_weight_updates(self, t):
 
@@ -253,6 +261,8 @@ class Model:
 		if par['train_input_weights']:
 			self.grad_dict['W_in'] += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['inp'], axis=0)
 		self.grad_dict['W_rnn']    += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['rec'], axis=0)
+		if par['balance_EI_training']:
+			self.grad_dict['W_rnn']    += self.EI_balance_delta
 		self.grad_dict['W_out']    += cp.mean(L_out[:,cp.newaxis,:] * self.kappa['out'], axis=0)
 		self.grad_dict['b_out']    += cp.mean(L_out[:,cp.newaxis,:], axis=0)
 
