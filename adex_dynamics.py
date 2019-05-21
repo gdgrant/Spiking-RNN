@@ -21,7 +21,7 @@ def calculate_dynamics(prev_eps, x, z, z_prev, st, h, con_dict, eff_var):
 	v, syn_x, syn_u = st['v'], st['sx'], st['su']
 
 	# Clip membrane voltage for optimization purposes
-	v = cp.minimum(-20e-3, v)
+	# v = cp.minimum(-20e-3, v)
 
 	# Make constant dictionary a shorter variable name for readability
 	c = con_dict['adex']
@@ -50,8 +50,15 @@ def calculate_dynamics(prev_eps, x, z, z_prev, st, h, con_dict, eff_var):
 	one_minus_z           = 1. - z
 	one_minus_z_dt_over_C = one_minus_z * dt_over_C
 
-	exp_v_minus_one = cp.exp((v-c['V_T'][s])/c['D'][s])-1
-	exp_v_minus_one = cp.clip(exp_v_minus_one, -1., 1.)
+	if False:
+		# Use full derivative of voltage in gradient
+		exp_v_minus_one = cp.exp((v-c['V_T'][s])/c['D'][s])-1
+		exp_v_minus_one = cp.minimum(1., exp_v_minus_one)
+		eps_dyn_v = exp_v_minus_one
+	else:
+		# Use approximation of exponential of voltage in gradient
+		lin_v = (v - c['V_T'][s])/c['D'][s]
+		eps_dyn_v = lin_v
 
 	# Set up epsilon recording
 	eps = {}
@@ -68,7 +75,7 @@ def calculate_dynamics(prev_eps, x, z, z_prev, st, h, con_dict, eff_var):
 
 		# Calculate eps_V
 		eps[v]['v'] = \
-			  prev_eps[v]['v'] * one_minus_z*(1+dt_g_over_C*exp_v_minus_one) \
+			  prev_eps[v]['v'] * one_minus_z*(1+dt_g_over_C*eps_dyn_v) \
 			- prev_eps[v]['w'] * one_minus_z_dt_over_C \
 			+ prev_eps[v]['i'] * one_minus_z_dt_over_C
 
