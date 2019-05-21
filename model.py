@@ -85,16 +85,22 @@ class Model:
 
 	def zero_state(self):
 		""" Set all gradient and epsilon arrays to zero """
+		""" Runs every iteration"""
 
 		for v in self.var_names:
-			self.grad_dict[v] = cp.zeros_like(self.grad_dict[v])
+			""" Current optimization: change like_zeros() to  x = x-x. Requires further testing. """
+
+			# self.grad_dict[v] = cp.zeros_like(self.grad_dict[v])
+			self.grad_dict[v] = self.grad_dict[v] - self.grad_dict[v]
 
 		for v in self.eps.keys():
 			for s in self.eps[v].keys():
-				self.eps[v][s] = cp.zeros_like(self.eps[v][s])
+				# self.eps[v][s] = cp.zeros_like(self.eps[v][s])
+				self.eps[v][s] = self.eps[v][s] - self.eps[v][s]
 
 		for k in self.kappa.keys():
-			self.kappa[k] = cp.zeros_like(self.kappa[k])
+			# self.kappa[k] = cp.zeros_like(self.kappa[k])
+			self.kappa[k] = self.kappa[k] - self.kappa[k]
 
 
 	def apply_variable_rules(self):
@@ -210,7 +216,7 @@ class Model:
 		# Update the synaptic plasticity state (recurrent only; input is static)
 		st['sx']['rec'], st['su']['rec'] = \
 			synaptic_plasticity(st['sx']['rec'], st['su']['rec'], z_i[:,:,cp.newaxis], self.con_dict, par['use_stp'])
-		
+
 		# Update output trace based on postsynaptic cell state (Eq. 12)
 		y = self.con_dict['adex']['kappa'] * y + z_j @ self.eff_var['W_out'] + self.eff_var['b_out']
 
@@ -242,7 +248,7 @@ class Model:
 			print(z.shape)
 			print(h.shape)
 			print(state_dict['su']['rec'].shape)
-			
+
 			self.EI_balance_delta = z * h * state_dict['su']['rec'] * state_dict['sx']['rec'] * z[cp.newaxis,:,:] * (1 / (C_over_dt + c['g'][s]*(cp.exp((v-c['V_T'][s])/c['D'][s])-1))) / c['beta']
 			self.EI_balance_delta = cp.matmul(self.con_dict['EI_matrix'], self.EI_balance_delta)
 
@@ -257,7 +263,7 @@ class Model:
 		# Spiking penalty
 		# - cp.mean(self.eff_var['W_out'])*par['L_spike_cost']*cp.mean(self.z[t], axis=[1], keepdims=True)
 
-		### Update pending weight changes
+		# Update pending weight changes
 		if par['train_input_weights']:
 			self.grad_dict['W_in'] += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['inp'], axis=0)
 		self.grad_dict['W_rnn']    += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['rec'], axis=0)
@@ -316,7 +322,7 @@ class Model:
 			fig.suptitle(n)
 			ax[0].set_title('Gradient')
 			ax[1].set_title('Variable')
-			
+
 			plt.savefig('./savedir/{}_delta_{}_iter{:0>6}.png'.format(par['savefn'], n, i), bbox_inches='tight')
 			if par['save_pdfs']:
 				plt.savefig('./savedir/{}_delta_{}_iter{:0>6}.pdf'.format(par['savefn'], n, i), bbox_inches='tight')
@@ -349,7 +355,7 @@ class Model:
 			ax[i].fill_between(time, err_low[:,0], err_high[:,0], color=c_err[0])
 			ax[i].fill_between(time, err_low[:,1], err_high[:,1], color=c_err[1])
 			ax[i].fill_between(time, err_low[:,2], err_high[:,2], color=c_err[2])
-		
+
 			ax[i].plot(time, r[:,0], c=c_res[0], label='Fixation')
 			ax[i].plot(time, r[:,1], c=c_res[1], label='Cat. 1 / Match')
 			ax[i].plot(time, r[:,2], c=c_res[2], label='Cat. 2 / Non-Match')
@@ -358,7 +364,7 @@ class Model:
 
 			for t in timings:
 				ax[i].axvline(t, c='k', ls='--')
-		
+
 		fig.suptitle('Output Neuron Behavior')
 		ax[0].set_title('Cat. 1 / Match Trials')
 		ax[1].set_title('Cat. 2 / Non-Match Trials')
