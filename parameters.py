@@ -7,10 +7,10 @@ print('\n--> Loading parameters...')
 
 global par
 par = {
-	
+
 	# File context
 	'save_dir'                : './savedir/',
-	'savefn'                  : 'testing',
+	'savefn'                  : 'merge_testing',
 	'save_data_files'         : False,
 	'save_pdfs'               : False,
 
@@ -73,14 +73,18 @@ par = {
 	# Task setup
 	'task'                    : 'dmc',
 	'num_motion_dirs'         : 8,
-    'kappa'                   : 2.,
-    'tuning_height'           : 100.,
-    'response_multiplier'     : 2.,
-    'num_rules'               : 1,
-    'fixation_on'             : True,
+	'kappa'                   : 2.,
+	'tuning_height'           : 100.,
+	'response_multiplier'     : 2.,
+	'num_rules'               : 1,
+	'fixation_on'             : True,
 
-    # Task timings
-    'dead_time'               : 20,
+	# Task variable parameters
+	'var_delay'               : True,
+	'catch_prob'              : 0.,
+
+	# Task timings
+	'dead_time'               : 20,
 	'fix_time'                : 30,
 	'sample_time'             : 150,
 	'delay_time'              : 120,
@@ -111,7 +115,7 @@ def make_weights_and_masks():
 	if par['EI_prop'] == 1.:
 		par['W_rnn_init'] = np.random.uniform(-par['rnn_gamma'], par['rnn_gamma'], size=[par['n_hidden'],par['n_hidden']])
 	else:
-		par['W_rnn_init'] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=[par['n_hidden'], par['n_hidden']])		
+		par['W_rnn_init'] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=[par['n_hidden'], par['n_hidden']])       
 		if par['balance_EI']:
 			par['W_rnn_init'][par['n_EI']:,:par['n_EI']] *= 2
 			par['W_rnn_init'][:par['n_EI'],par['n_EI']:] *= 2
@@ -156,9 +160,14 @@ def update_parameters(updates, verbose=True, update_deps=True):
 
 def update_dependencies():
 
+	# Var delay parameters
+	par['var_delay_max'] = par['delay_time']
+	par['var_delay_min'] = int(par['var_delay_max']/2)
+	par['delay_times'] = np.array([par['delay_time']-20, par['delay_time'], par['delay_time']+20])
+
 	# Set up trial length and number of time steps
 	par['trial_length'] = par['dead_time'] + par['fix_time'] \
-		+ par['sample_time'] + par['delay_time'] + par['test_time']
+		+ par['sample_time'] + par['delay_times'][-1] + par['test_time']
 	par['num_time_steps'] = par['trial_length'] // par['dt']
 
 	# Network input and EI sizes
@@ -249,15 +258,15 @@ def update_dependencies():
 	elif par['cell_type'] == 'lif':
 		### LIF with Adaptive Threshold spiking
 		par['lif'] = {
-			'tau_m'		: 20e-3,
-			'tau_a'		: 200e-3,
-			'tau_o'		: 20e-3,
-			'v_th'		: 0.61,
-			'beta'		: 1.8
+			'tau_m'     : 20e-3,
+			'tau_a'     : 200e-3,
+			'tau_o'     : 20e-3,
+			'v_th'      : 0.61,
+			'beta'      : 1.8
 		}
 		par['lif']['alpha'] = np.exp(-par['dt_sec']/par['lif']['tau_m'])
 		par['lif']['rho']   = np.exp(-par['dt_sec']/par['lif']['tau_a'])
-		par['lif']['kappa']	= np.exp(-par['dt_sec']/par['lif']['tau_o'])
+		par['lif']['kappa'] = np.exp(-par['dt_sec']/par['lif']['tau_o'])
 
 
 update_dependencies()
