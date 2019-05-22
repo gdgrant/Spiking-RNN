@@ -129,7 +129,8 @@ class Stimulus:
 		test_category    = test_direction//int(par['num_motion_dirs']/2)
 
 		match = sample_category == test_category
-		trial_info['match'] = match
+		trial_info['match']  = match
+		trial_info['sample_cat'] = sample_category
 
 		if par['fixation_on']:
 			trial_info['neural_input'][:end_delay_time,:,par['num_motion_tuned']:par['num_motion_tuned']+par['num_fix_tuned']] += self.fix_tuning[np.newaxis,:,0]

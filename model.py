@@ -142,9 +142,8 @@ class Model:
 		# Establish voltage, spike, output, and efficacy recording
 		self.v = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
+		self.s = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
-		self.syn_x = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
-		self.syn_u = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 
 		# Initialize cell states
 		state = self.con_dict['adex']['V_r'] * self.size_ref
@@ -177,12 +176,9 @@ class Model:
 			self.z[t,...], self.y[t,...], h, state_dict = \
 				self.recurrent_cell(x, latency_z, self.y[t-1,...], state_dict)
 
-			# Record membrane voltage
+			# Record cell state
 			self.v[t,...] = state_dict['v']
-
-			# Record synaptic efficacies
-			self.syn_x[t,...] = cp.squeeze(state_dict['sx']['rec'])
-			self.syn_u[t,...] = cp.squeeze(state_dict['su']['rec'])
+			self.s[t,...] = cp.squeeze(state_dict['sx']['rec']) * cp.squeeze(state_dict['su']['rec'])
 
 			# Update eligibilities and traces
 			self.update_eligibility(x, self.z[t,...], latency_z, state_dict, h, t)
@@ -470,8 +466,7 @@ def main():
 					'spiking'		: to_cpu(model.z),
 					'voltage'		: to_cpu(model.v),
 					'output'		: to_cpu(model.y),
-					'syn_x'			: to_cpu(model.syn_x),
-					'syn_u'			: to_cpu(model.syn_u)
+					'syn_eff'		: to_cpu(model.s),
 				}
 
 				pickle.dump(data, open('./savedir/{}_data_iter{:0>6}.pkl'.format(par['savefn'], i), 'wb'))

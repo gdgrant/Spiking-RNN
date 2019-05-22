@@ -10,7 +10,7 @@ par = {
 	
 	# File context
 	'save_dir'                : './savedir/',
-	'savefn'                  : 'rate1em12_cond100em12_500neuron_60delay',
+	'savefn'                  : 'testing',
 	'save_data_files'         : False,
 	'save_pdfs'               : False,
 
@@ -31,7 +31,7 @@ par = {
 	'use_stp'                 : True,
 	'EI_prop'                 : 0.8,
 	'balance_EI'              : True,
-	'balance_EI_training'     : True,
+	'balance_EI_training'     : False,
 
 	# Network shape
 	'num_motion_tuned'        : 96,
@@ -83,7 +83,7 @@ par = {
     'dead_time'               : 20,
 	'fix_time'                : 30,
 	'sample_time'             : 150,
-	'delay_time'              : 60,
+	'delay_time'              : 120,
 	'test_time'               : 150,
 	'mask_time'               : 40,
 
@@ -143,12 +143,15 @@ def make_weights_and_masks():
 		par['W_in_mask'] = np.ones_like(par['W_in_mask'])
 
 
-def update_parameters(updates):
-	print('\n--- Updates ----------------')
+def update_parameters(updates, verbose=True, update_deps=True):
+	if verbose:
+		print('\n--- Updates ----------------')
 	for k in updates.keys():
-		print(k.ljust(24), ': {}'.format(updates[k]))
+		if verbose:
+			print(k.ljust(24), ': {}'.format(updates[k]))
 		par[k] = updates[k]
-	update_dependencies()
+	if update_deps:
+		update_dependencies()
 
 
 def update_dependencies():
