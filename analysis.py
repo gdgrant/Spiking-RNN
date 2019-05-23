@@ -8,7 +8,7 @@ from stimulus import Stimulus
 from model import Model
 
 savefn = 'saving_500neuron_120delay_v0_data_iter001900'
-data = pickle.load(open('./savedir/{}.pkl'.format(savefn), 'rb'))
+data = pickle.load(open('./savedir/archive/{}.pkl'.format(savefn), 'rb'))
 
 update_parameters(data['par'], verbose=False)
 update_parameters({'batch_size':128})
@@ -100,81 +100,87 @@ def run_pev_analysis():
 
 	plt.show()
 
+
+def run_SVM_analysis():
+
+
+	print('\nLoading and running model.')
+	model = Model()
+	stim  = Stimulus()
+	runs  = 8
+
+	m_all = []
+	v_all = []
+	s_all = []
+
+	for i in range(runs):
+		print('R:{:>2}'.format(i), end='\r')
+		trial_info = stim.make_batch(var_delay=False)
+		model.run_model(trial_info)
+
+		m_all.append(trial_info['sample_cat'])
+		v_all.append(to_cpu(model.v))
+		s_all.append(to_cpu(model.s))
+
+	del model
+	del stim
+
+	batch_size = runs*par['batch_size']
+
+	m = np.concatenate(m_all, axis=0)
+	v = np.concatenate(v_all, axis=1)
+	s = np.concatenate(s_all, axis=1)
+
+	print('Performing SVM decoding on {} trials.\n'.format(batch_size))
+	# Initialize linear classifier
+	args = {'kernel':'linear', 'decision_function_shape':'ovr', 'shrinking':False, 'tol':1e-3}
+	lin_clf_v = SVC(**args)
+	lin_clf_s = SVC(**args)
+
+	score_v = np.zeros([par['num_time_steps']])
+	score_s = np.zeros([par['num_time_steps']])
+
+	# Choose training and testing indices
+	train_pct = 0.75
+	num_train_inds = int(batch_size * train_pct)
+
+	shuffled   = np.random.permutation(batch_size)
+	train_inds = shuffled[:num_train_inds]
+	test_inds  = shuffled[num_train_inds:]
+
+	for t in range(end_dead_time, par['num_time_steps']):
+		print('T:{:>4}'.format(t), end='\r')
+		
+		lin_clf_v.fit(v[t,train_inds,:], m[train_inds])
+		lin_clf_s.fit(s[t,train_inds,:], m[train_inds])
+
+		dec_v = lin_clf_v.predict(v[t,test_inds,:])
+		dec_s = lin_clf_s.predict(s[t,test_inds,:])
+
+		score_v[t] = np.mean(m[test_inds]==dec_v)
+		score_s[t] = np.mean(m[test_inds]==dec_s)
+
+
+	fig, ax = plt.subplots(1, figsize=(12,8))
+	ax.plot(score_v, c=[241/255, 153/255, 1/255], label='Voltage')
+	ax.plot(score_s, c=[58/255, 79/255, 65/255], label='Syn. Eff.')
+
+	ax.axhline(0.5, c='k', ls='--')
+	ax.axvline(trial_info['timings'][0,0], c='k', ls='--')
+	ax.axvline(trial_info['timings'][1,0], c='k', ls='--')
+
+	ax.set_title('SVM Decoding of Sample Category')
+	ax.set_xlabel('Time')
+	ax.set_ylabel('Decoding Accuracy')
+	ax.set_yticks([0., 0.25, 0.5, 0.75, 1.])
+	ax.grid()
+	ax.set_xlim(0,par['num_time_steps']-1)
+
+	ax.legend()
+	plt.savefig('./analysis/svm_decoding.png', bbox_inches='tight')
+
+	print('SVM decoding complete.')
+
 ################################################################################
 
-print('\nLoading and running model.')
-model = Model()
-stim  = Stimulus()
-runs  = 8
-
-m_all = []
-v_all = []
-s_all = []
-
-for i in range(runs):
-	print('R:{:>2}'.format(i), end='\r')
-	trial_info = stim.make_batch()
-	model.run_model(trial_info)
-
-	m_all.append(trial_info['sample_cat'])
-	v_all.append(to_cpu(model.v))
-	s_all.append(to_cpu(model.s))
-
-del model
-del stim
-
-batch_size = runs*par['batch_size']
-
-m = np.concatenate(m_all, axis=0)
-v = np.concatenate(v_all, axis=1)
-s = np.concatenate(s_all, axis=1)
-
-print('Performing SVM decoding on {} trials.\n'.format(batch_size))
-# Initialize linear classifier
-args = {'kernel':'linear', 'decision_function_shape':'ovr', 'shrinking':False, 'tol':1e-3}
-lin_clf_v = SVC(**args)
-lin_clf_s = SVC(**args)
-
-score_v = np.zeros([par['num_time_steps']])
-score_s = np.zeros([par['num_time_steps']])
-
-# Choose training and testing indices
-train_pct = 0.75
-num_train_inds = int(batch_size * train_pct)
-
-shuffled   = np.random.permutation(batch_size)
-train_inds = shuffled[:num_train_inds]
-test_inds  = shuffled[num_train_inds:]
-
-for t in range(end_dead_time, par['num_time_steps']):
-	print('T:{:>4}'.format(t), end='\r')
-	
-	lin_clf_v.fit(v[t,train_inds,:], m[train_inds])
-	lin_clf_s.fit(s[t,train_inds,:], m[train_inds])
-
-	dec_v = lin_clf_v.predict(v[t,test_inds,:])
-	dec_s = lin_clf_s.predict(s[t,test_inds,:])
-
-	score_v[t] = np.mean(m[test_inds]==dec_v)
-	score_s[t] = np.mean(m[test_inds]==dec_s)
-
-
-fig, ax = plt.subplots(1, figsize=(12,8))
-ax.plot(score_v, c=[241/255, 153/255, 1/255], label='Voltage')
-ax.plot(score_s, c=[58/255, 79/255, 65/255], label='Syn. Eff.')
-
-ax.axhline(0.5, c='k', ls='--')
-for t in trial_info['timings']:
-	ax.axvline(t, c='k', ls='--')
-
-ax.title('SVM Decoding of Sample Category')
-ax.xlabel('Time')
-ax.ylabel('Decoding Accuracy')
-ax.set_yticks([0., 0.25, 0.5, 0.75, 1.])
-ax.grid()
-ax.xlim(0,par['num_time_steps']-1)
-
-ax.legend()
-plt.savefig('./analysis/svm_decoding.png', bbox_inches='tight')
-
-print('SVM decoding complete.')
+run_SVM_analysis()
