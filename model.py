@@ -126,7 +126,7 @@ class Model:
 			self.eff_var[k] *= self.con_dict[k+'_mask']
 
 
-	def run_model(self, trial_info):
+	def run_model(self, trial_info, testing=False):
 		""" Run the model by:
 			 - Loading trial data
 			 - Setting initial states
@@ -186,11 +186,14 @@ class Model:
 			self.v[t,...] = state_dict['v']
 			self.s[t,...] = cp.squeeze(state_dict['sx']['rec']) * cp.squeeze(state_dict['su']['rec'])
 
-			# Update eligibilities and traces
-			self.update_eligibility(x, self.z[t,...], latency_z, state_dict, h, t)
+			# Only run updates if training
+			if not testing:
 
-			# Update pending weight changes
-			self.calculate_weight_updates(t)
+				# Update eligibilities and traces
+				self.update_eligibility(x, self.z[t,...], latency_z, state_dict, h, t)
+
+				# Update pending weight changes
+				self.calculate_weight_updates(t)
 
 
 	def recurrent_cell(self, x, z_i, y, st):
@@ -205,7 +208,7 @@ class Model:
 
 		# Update the input traces based on presynaptic spikes
 		st['i']['inp'] = self.con_dict['adex']['beta'] * st['i']['inp'] + \
-			(1-self.con_dict['adex']['beta']) * self.eff_var['W_in'] * st['sx']['inp'] * st['su']['inp'] * x[:,:,cp.newaxis]
+			(1-self.con_dict['adex']['beta']) * self.eff_var['W_in'] * x[:,:,cp.newaxis]
 		st['i']['rec'] = self.con_dict['adex']['beta'] * st['i']['rec'] + \
 			(1-self.con_dict['adex']['beta']) * self.eff_var['W_rnn'] * st['sx']['rec'] * st['su']['rec'] * z_i[:,:,cp.newaxis]
 
@@ -358,8 +361,8 @@ class Model:
 
 			ax[i].legend(loc="upper left")
 
-			for t in timings:
-				ax[i].axvline(t, c='k', ls='--')
+			ax[i].axvline(timings[0,:].min(), c='k', ls='--')
+			ax[i].axvline(timings[1,:].max(), c='k', ls='--')
 
 		fig.suptitle('Output Neuron Behavior')
 		ax[0].set_title('Cat. 1 / Match Trials')
@@ -407,15 +410,13 @@ def main():
 		task_acc_record.append(task_accuracy)
 		iter_record.append(i)
 
-		info_str0 = 'Iter {:>5} | Task Loss: {:5.3f} | Task Acc: {:5.3f} | '.format(\
-			i, losses['task'], task_accuracy)
-		info_str1 = 'Mean RNN Grad Mag: {:10.3e} | Full Acc: {:5.3f} | Mean Spiking: {:5.3f} Hz'.format(\
-			to_cpu(cp.mean(cp.abs(model.grad_dict['W_rnn']))), full_accuracy, mean_spiking)
+		info_str0 = 'Iter {:>5} | Task Loss: {:5.3f} | Task Acc: {:5.3f} | '.format(i, losses['task'], task_accuracy)
+		info_str1 = 'Full Acc: {:5.3f} | Mean Spiking: {:5.3f} Hz'.format(full_accuracy, mean_spiking)
 		print('Aggregating data...', end='\r')
 
 		V_min = to_cpu(model.v[:,0,:].T.min())
 
-		if i%10==0:
+		if i%50==0:
 			fig, ax = plt.subplots(4,1, figsize=(15,11), sharex=True)
 			ax[0].imshow(to_cpu(model.input_data[:,0,:].T), aspect='auto')
 			ax[0].set_title('Input Data')
@@ -457,27 +458,18 @@ def main():
 				plt.clf()
 				plt.close()
 
-
-		if i%50 == 0:
+			trial_info = stim.make_batch(var_delay=False)
+			model.run_model(trial_info, testing=True)
 			model.show_output_behavior(i, trial_info['match'], trial_info['timings'])
-
+	
 		if i%100 == 0:
 			model.visualize_delta(i)
 
 			if par['save_data_files']:
-				data = {
-					'par'			: par,
-					'trial_info'	: trial_info,
-					'weights'		: to_cpu(model.var_dict),
-					'spiking'		: to_cpu(model.z),
-					'voltage'		: to_cpu(model.v),
-					'output'		: to_cpu(model.y),
-					'syn_eff'		: to_cpu(model.s),
-				}
-
+				data = {'par' : par, 'weights' : to_cpu(model.var_dict)}
 				pickle.dump(data, open('./savedir/{}_data_iter{:0>6}.pkl'.format(par['savefn'], i), 'wb'))
 
-		# Print output info
+		# Print output info (after all saving of data is complete)
 		print(info_str0 + info_str1)
 
 

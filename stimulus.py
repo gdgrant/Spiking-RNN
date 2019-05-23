@@ -32,17 +32,18 @@ class Stimulus:
 		if do_plots:
 			import matplotlib.pyplot as plt
 			fig, ax = plt.subplots(2,3)
-			ax[0,0].imshow(trial_info['neural_input'][:,0,:], aspect='auto', clim=[0,par['tuning_height']])
-			ax[0,1].imshow(trial_info['desired_output'][:,0,:], aspect='auto', clim=[0,1])
-			ax[0,2].imshow(trial_info['train_mask'][:,0,np.newaxis], aspect='auto', clim=[0,1])
-
 			ax[0,0].set_xlabel('Neurons')
 			ax[0,0].set_ylabel('Time')
 			ax[0,0].set_title('Input')
 			ax[0,1].set_title('Target')
 			ax[0,2].set_title('Mask')
 
-		trial_info['neural_input'] = np.where(trial_info['neural_input']/1000*par['dt'] > np.random.rand(*trial_info['neural_input'].shape), \
+			ax[0,0].imshow(trial_info['neural_input'][:,0,:], aspect='auto', clim=[0,par['tuning_height']])
+			ax[0,1].imshow(trial_info['desired_output'][:,0,:], aspect='auto', clim=[0,1])
+			ax[0,2].imshow(trial_info['train_mask'][:,0,np.newaxis], aspect='auto', clim=[0,1])
+
+		trial_info['neural_input'] = np.where(\
+			trial_info['neural_input']/1000*par['dt'] > np.random.rand(*trial_info['neural_input'].shape), \
 			np.ones_like(trial_info['neural_input']), np.zeros_like(trial_info['neural_input']))
 
 		if do_plots:
@@ -50,7 +51,6 @@ class Stimulus:
 			ax[1,1].imshow(trial_info['desired_output'][:,0,:], aspect='auto', clim=[0,1])
 			ax[1,2].imshow(trial_info['train_mask'][:,0,np.newaxis], aspect='auto', clim=[0,1])
 			plt.show()
-			# quit()
 
 		return trial_info
 
@@ -107,20 +107,26 @@ class Stimulus:
 			'neural_input'      : np.random.normal(0., par['noise_in'], size=[par['num_time_steps'], par['batch_size'], par['n_input']]),
 			'desired_output'    : np.zeros([par['num_time_steps'], par['batch_size'], par['n_output']]),
 			'train_mask'        : np.zeros([par['num_time_steps'], par['batch_size']]),
-			'timings'           : np.zeros([par['batch_size']])
+			'timings'           : np.zeros([2,par['batch_size']])
 		}
 
 		# Select match/nonmatch and catch trials
 		sample_direction = np.random.choice(par['num_motion_dirs'], size=par['batch_size'])
 		test_direction   = np.random.choice(par['num_motion_dirs'], size=par['batch_size'])
-		catch_trials     = np.random.choice([True,False], size=par['batch_size'], p=[par['catch_prob'], 1-par['catch_prob']])
+		if var_delay:
+			catch_trials = np.random.choice([True,False], size=par['batch_size'], p=[par['catch_prob'], 1-par['catch_prob']])
+		else:
+			catch_trials = np.zeros([par['batch_size']], dtype=bool)
 
 		sample_category  = sample_direction//int(par['num_motion_dirs']/2)
 		test_category    = test_direction//int(par['num_motion_dirs']/2)
 
 		match = sample_category == test_category
-		trial_info['match'] = match
+		trial_info['match']      = match
 		trial_info['sample_cat'] = sample_category
+		trial_info['test_cat']   = test_category
+		trial_info['sample_dir'] = sample_direction
+		trial_info['test_dir']   = test_direction
 
 		output_neuron = np.where(match, 1, 2)
 
@@ -129,6 +135,7 @@ class Stimulus:
 		end_fix_time        = end_dead_time + par['fix_time']//par['dt']
 		end_sample_time     = end_fix_time + par['sample_time']//par['dt']
 
+		trial_info['timings'][0,:] = end_sample_time
 		for t in range(par['batch_size']):
 
 			if var_delay:
@@ -146,7 +153,7 @@ class Stimulus:
 			end_test_time       = end_delay_time + par['test_time']//par['dt']
 
 			# Save end of delay time unless catch trial
-			trial_info['timings'][t] = end_delay_time if not catch_trials[t] else -1
+			trial_info['timings'][1,t] = end_delay_time
 
 			# Generate sample stimulus
 			trial_info['train_mask'][end_fix_time:end_delay_time,t] = 1.
@@ -243,8 +250,7 @@ class Stimulus:
 
 		return motion_tuning, fix_tuning, rule_tuning
 
+
 if __name__ == '__main__':
 	s = Stimulus()
 	trial_info = s.make_batch(par['var_delay'])
-
-	

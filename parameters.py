@@ -16,7 +16,7 @@ par = {
 
 	# Training environment
 	'batch_size'              : 64,
-	'iterations'              : 100000,
+	'iterations'              : 2000,
 	'learning_rate'           : 1e-12,
 	'cell_type'               : 'adex',
 	'optimizer'               : 'adam',
@@ -81,7 +81,7 @@ par = {
 
 	# Task variable parameters
 	'var_delay'               : True,
-	'catch_prob'              : 0.,
+	'catch_prob'              : 0.1,
 
 	# Task timings
 	'dead_time'               : 20,
