@@ -457,17 +457,17 @@ def main():
 					plt.savefig('./savedir/{}_training_curve_iter{:0>6}.pdf'.format(par['savefn'], i), bbox_inches='tight')
 				plt.clf()
 				plt.close()
+	
+			if i%100 == 0:
+				model.visualize_delta(i)
+
+				if par['save_data_files']:
+					data = {'par' : par, 'weights' : to_cpu(model.var_dict)}
+					pickle.dump(data, open('./savedir/{}_data_iter{:0>6}.pkl'.format(par['savefn'], i), 'wb'))
 
 			trial_info = stim.make_batch(var_delay=False)
 			model.run_model(trial_info, testing=True)
 			model.show_output_behavior(i, trial_info['match'], trial_info['timings'])
-	
-		if i%100 == 0:
-			model.visualize_delta(i)
-
-			if par['save_data_files']:
-				data = {'par' : par, 'weights' : to_cpu(model.var_dict)}
-				pickle.dump(data, open('./savedir/{}_data_iter{:0>6}.pkl'.format(par['savefn'], i), 'wb'))
 
 		# Print output info (after all saving of data is complete)
 		print(info_str0 + info_str1)
