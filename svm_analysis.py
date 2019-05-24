@@ -9,7 +9,14 @@ from model import Model
 
 # List save files to analyze
 savefns = [
-	'verify_500neuron_var120delay_v0_data_iter000300',
+	'verify_500neuron_var120delay_v0_data_iter001900',
+	'verify_500neuron_var120delay_v1_data_iter001900',
+	'verify_500neuron_var120delay_v5_data_iter001900',
+	'verify_500neuron_var120delay_v6_data_iter001900',
+	'verify_500neuron_var120delay_v10_data_iter001900',
+	'verify_500neuron_var120delay_v11_data_iter001900',
+	'verify_500neuron_var120delay_v15_data_iter001900',
+	'verify_500neuron_var120delay_v16_data_iter001900',
 ]
 
 # Make plot
@@ -38,7 +45,7 @@ for num_fn, fn in enumerate(savefns):
 	print('\nLoading and running model.')
 	model = Model()
 	stim  = Stimulus()
-	runs  = 2
+	runs  = 8
 
 	c_all = []
 	d_all = []
