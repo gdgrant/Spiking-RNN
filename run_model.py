@@ -17,7 +17,7 @@ def print_parameters():
 	print('-'*60)
 
 
-delay = 120
+delay = 500
 n = 5
 r = int(sys.argv[1])
 for j in range(n*r, n*(r+1)):
