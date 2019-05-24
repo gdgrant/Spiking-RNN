@@ -190,7 +190,7 @@ class Model:
 			if not testing:
 
 				# Update eligibilities and traces
-				self.update_eligibility(x, self.z[t,...], latency_z, state_dict, h, t)
+				self.update_eligibility(x, self.z[t,...], latency_z, state_dict, h, t, cp.squeeze(state_dict['sx']['rec']), cp.squeeze(state_dict['su']['rec']))
 
 				# Update pending weight changes
 				self.calculate_weight_updates(t)
@@ -226,7 +226,7 @@ class Model:
 		return z_j, y, h, st
 
 
-	def update_eligibility(self, x, z, z_prev, state_dict, h, t):
+	def update_eligibility(self, x, z, z_prev, state_dict, h, t, syn_x, syn_u):
 
 		# Calculate the model dynamics and generate new epsilons
 		self.eps = calculate_dynamics(self.eps, x, z, z_prev, state_dict, h, \
@@ -242,13 +242,12 @@ class Model:
 		self.kappa['rec'] = self.con_dict['adex']['kappa']*self.kappa['rec'] + e_rec
 		self.kappa['out'] = self.con_dict['adex']['kappa']*self.kappa['out'] + e_out
 
+		c = self.con_dict['adex']
+		s = np.s_[:,cp.newaxis,:]
+
 		# EI balance
 		if par['balance_EI_training']:
-			print(z.shape)
-			print(h.shape)
-			print(state_dict['su']['rec'].shape)
-
-			self.EI_balance_delta = z * h * state_dict['su']['rec'] * state_dict['sx']['rec'] * z[cp.newaxis,:,:] * (1 / (C_over_dt + c['g'][s]*(cp.exp((v-c['V_T'][s])/c['D'][s])-1))) / c['beta']
+			self.EI_balance_delta = (z * h * syn_x * syn_u)[:,:,cp.newaxis] * (z[cp.newaxis,:,:] * (1 / (c['C'][s]/c['dt'] + c['g'][s]*(cp.exp((state_dict['v']-c['V_T'][s])/c['D'][s])-1))) / c['beta']).reshape((32,1,500))
 			self.EI_balance_delta = cp.matmul(self.con_dict['EI_matrix'], self.EI_balance_delta)
 
 	def calculate_weight_updates(self, t):
@@ -267,7 +266,7 @@ class Model:
 			self.grad_dict['W_in'] += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['inp'], axis=0)
 		self.grad_dict['W_rnn']    += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['rec'], axis=0)
 		if par['balance_EI_training']:
-			self.grad_dict['W_rnn']    += self.EI_balance_delta
+			self.grad_dict['W_rnn']    += cp.mean(self.EI_balance_delta, axis=0)
 		self.grad_dict['W_out']    += cp.mean(L_out[:,cp.newaxis,:] * self.kappa['out'], axis=0)
 		self.grad_dict['b_out']    += cp.mean(L_out[:,cp.newaxis,:], axis=0)
 
