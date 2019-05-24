@@ -89,7 +89,7 @@ par = {
 	'sample_time'             : 150,
 	'delay_time'              : 120,
 	'test_time'               : 150,
-	'mask_time'               : 40,
+	'mask_time'               : 20,
 
 }
 
