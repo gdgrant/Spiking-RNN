@@ -150,7 +150,7 @@ class Stimulus:
 			# Variable trial times
 			end_delay_time = end_sample_time + delay
 			end_mask_time  = end_delay_time + par['mask_time']//par['dt']
-			end_test_time  = par['num_time_steps'] - 1 #end_delay_time + par['test_time']//par['dt']
+			end_test_time  = par['num_time_steps'] #end_delay_time + par['test_time']//par['dt']
 
 			# Save end of delay time unless catch trial
 			trial_info['timings'][1,t] = end_delay_time
