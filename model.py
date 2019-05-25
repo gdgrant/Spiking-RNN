@@ -54,7 +54,7 @@ class Model:
 
 
 	def init_optimizer(self):
-		# Initialize the optimizer to be used for this model """
+		""" Initialize the optimizer to be used for this model """
 
 		if par['optimizer']	== 'standard':
 			self.optimizer = Standard(self.var_dict, par['learning_rate'])
@@ -221,7 +221,7 @@ class Model:
 
 		# Calculate h, the pseudo-derivative (Eq. 5, ~24, 20/21)
 		# Bellec et al., 2018b
-		h = par['gamma_psd'] * cp.maximum(0., 1 - cp.abs((st['v']-self.con_dict['adex']['Vth'])/par['pseudo_th']))
+		h = par['gamma_psd'] * cp.maximum(0., 1 - cp.abs((st['v']-self.con_dict['adex']['V_T'])/par['pseudo_th']))
 
 		return z_j, y, h, st
 
@@ -468,6 +468,12 @@ def main():
 			trial_info = stim.make_batch(var_delay=False)
 			model.run_model(trial_info, testing=True)
 			model.show_output_behavior(i, trial_info['match'], trial_info['timings'])
+
+		if i%100 == 0:
+			if np.mean(task_acc_record[-100:]) > 0.9:
+				print('\nMean accuracy greater than 0.9 over last 100 iters.')
+				print('Moving on to next model.\n')
+				break
 
 		# Print output info (after all saving of data is complete)
 		print(info_str0 + info_str1)

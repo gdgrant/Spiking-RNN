@@ -17,19 +17,17 @@ def print_parameters():
 	print('-'*60)
 
 
-delay = 120
-pseudo_th = 40e-3
+delay = 1000
 n = 5
 r = int(sys.argv[1]) - 2
 for j in range(n*r, n*(r+1)):
 
-	savefn = 'impgrad_{:0>3}pth_{}neuron_var{}delay_v{:0>2}'.format(int(1000*par['pseudo_th']), par['n_hidden'], delay, j)
+	savefn = 'longdel_{}neuron_var{}delay_v{:0>2}'.format(par['n_hidden'], delay, j)
 
 	updates = {
 		'savefn'			: savefn,
-		'pseudo_th'			: pseudo_th,
 		'delay_time'		: delay,
-		'iterations'		: 2000,
+		'iterations'		: 10000,
 		'save_data_files'	: True }
 
 	update_parameters(updates)
