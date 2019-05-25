@@ -247,7 +247,7 @@ class Model:
 
 		# EI balance
 		if par['balance_EI_training']:
-			self.EI_balance_delta = (z * h * syn_x * syn_u)[:,:,cp.newaxis] * (z[cp.newaxis,:,:] * (1 / (c['C'][s]/c['dt'] + c['g'][s]*(cp.exp((state_dict['v']-c['V_T'][s])/c['D'][s])-1))) / c['beta']).reshape((32,1,500))
+			self.EI_balance_delta = (z * h * syn_x * syn_u)[:,:,cp.newaxis] * (z[cp.newaxis,:,:] * (1 / (c['C'][s]/c['dt'] + c['g'][s]*(cp.exp((state_dict['v']-c['V_T'][s])/c['D'][s])-1))) / c['beta']).reshape((par['batch_size'],1,500))
 			self.EI_balance_delta = cp.matmul(self.con_dict['EI_matrix'], self.EI_balance_delta)
 
 	def calculate_weight_updates(self, t):
