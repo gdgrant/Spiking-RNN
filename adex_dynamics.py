@@ -80,7 +80,7 @@ def calculate_dynamics(prev_eps, x, z, z_prev, st, h, h_prev, con_dict, eff_var)
 		eps[v]['v'] = \
 			  prev_eps[v]['v'] * one_minus_z*(1+dt_g_over_C*eps_dyn_v) \
 			- prev_eps[v]['w'] * one_minus_z_dt_over_C \
-			+ prev_eps[v]['i'] * one_minus_z_dt_over_C * 1e-12
+			+ prev_eps[v]['i'] * one_minus_z_dt_over_C
 
 		# Calculate eps_w
 		eps[v]['w'] = \
