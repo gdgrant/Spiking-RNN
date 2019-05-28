@@ -145,8 +145,11 @@ class Model:
 		# Clear gradients and epsilons
 		self.zero_state()
 
-		# Establish hidden state, voltage, spike, output, and efficacy recording
+		# Establish h and syn_x recording
 		self.h = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
+		self.syn_x = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
+
+		# Establish hidden state, voltage, spike, output, and efficacy recording
 		self.v = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.s = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
@@ -178,23 +181,27 @@ class Model:
 			# Get recurrent spikes from par['latency'] time steps ago
 			neuron_inds = np.arange(par['n_hidden']).astype(np.int64)
 			latency_z = self.z[t-(1+par['latency_inds']),:,neuron_inds].T
+			latency_z_prev = self.z[t-(1+2*par['latency_inds']),:,neuron_inds].T
 
 			# Run cell step
 			self.z[t,...], self.y[t,...], self.h[t,...], state_dict = \
 				self.recurrent_cell(x, latency_z, self.y[t-1,...], state_dict)
 
-			# latency h
-			latency_h = self.h[t-(1+par['latency_inds']),:,neuron_inds].T
-
 			# Record cell state
 			self.v[t,...] = state_dict['v']
 			self.s[t,...] = cp.squeeze(state_dict['sx']['rec']) * cp.squeeze(state_dict['su']['rec'])
+			self.syn_x[t,...] = cp.squeeze(state_dict['sx']['rec'])
+			
+			# latency h and syn_x
+			latency_h = self.h[t-(1+par['latency_inds']),:,neuron_inds].T
+			latency_syn_x = self.syn_x[t-(1+par['latency_inds']),:,neuron_inds].T
 
 			# Only run updates if training
 			if not testing:
 
 				# Update eligibilities and traces
-				self.update_eligibility(x, self.z[t,...], latency_z, state_dict, self.h[t,...], latency_h, t, cp.squeeze(state_dict['sx']['rec']), cp.squeeze(state_dict['su']['rec']))
+				self.update_eligibility(x, self.z[t,...], latency_z, latency_z_prev, state_dict, latency_syn_x, \
+										self.h[t,...], latency_h, t, cp.squeeze(state_dict['sx']['rec']), cp.squeeze(state_dict['su']['rec']))
 
 				# Update pending weight changes
 				self.calculate_weight_updates(t)
@@ -230,10 +237,10 @@ class Model:
 		return z_j, y, h, st
 
 
-	def update_eligibility(self, x, z, z_prev, state_dict, h, h_prev, t, syn_x, syn_u):
+	def update_eligibility(self, x, z, z_prev, z_prev_prev, state_dict, syn_x_prev, h, h_prev, t, syn_x, syn_u):
 
 		# Calculate the model dynamics and generate new epsilons
-		self.eps = calculate_dynamics(self.eps, x, z, z_prev, state_dict, h, h_prev, \
+		self.eps = calculate_dynamics(self.eps, x, z, z_prev, z_prev_prev, state_dict, syn_x_prev, h, h_prev, \
 			self.con_dict, self.eff_var)
 
 		# Update and modulate e's
