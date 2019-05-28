@@ -26,6 +26,7 @@ par = {
 	'L_spike_cost'            : 10.,
 	'train_input_weights'     : True,
 	'pseudo_th'               : 10e-3,
+	'dv_approx'               : True,
 
 	# Model architecture
 	'use_stp'                 : True,

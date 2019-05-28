@@ -1,4 +1,5 @@
 from imports import *
+from parameters import par
 
 def calculate_dynamics(prev_eps, x, z, z_prev, st, h, con_dict, eff_var):
 	""" Calculate the dynamics of the model
@@ -50,15 +51,15 @@ def calculate_dynamics(prev_eps, x, z, z_prev, st, h, con_dict, eff_var):
 	one_minus_z           = 1. - z
 	one_minus_z_dt_over_C = one_minus_z * dt_over_C
 
-	if False:
+	if par['dv_approx']:
+		# Use approximation of exponential of voltage in gradient
+		lin_v = (v - c['V_T'][s])/c['D'][s]
+		eps_dyn_v = lin_v
+	else:
 		# Use full derivative of voltage in gradient
 		exp_v_minus_one = cp.exp((v-c['V_T'][s])/c['D'][s])-1
 		exp_v_minus_one = cp.minimum(1., exp_v_minus_one)
 		eps_dyn_v = exp_v_minus_one
-	else:
-		# Use approximation of exponential of voltage in gradient
-		lin_v = (v - c['V_T'][s])/c['D'][s]
-		eps_dyn_v = lin_v
 
 	# Set up epsilon recording
 	eps = {}
@@ -77,7 +78,7 @@ def calculate_dynamics(prev_eps, x, z, z_prev, st, h, con_dict, eff_var):
 		eps[v]['v'] = \
 			  prev_eps[v]['v'] * one_minus_z*(1+dt_g_over_C*eps_dyn_v) \
 			- prev_eps[v]['w'] * one_minus_z_dt_over_C \
-			+ prev_eps[v]['i'] * one_minus_z_dt_over_C
+			+ prev_eps[v]['i'] * one_minus_z_dt_over_C * 1e-12
 
 		# Calculate eps_w
 		eps[v]['w'] = \
@@ -93,11 +94,11 @@ def calculate_dynamics(prev_eps, x, z, z_prev, st, h, con_dict, eff_var):
 
 		# Calculate eps_syn_x
 		eps[v]['sx'] = \
-			  prev_eps[v]['sx'] * (1 - stp_alpha - c['dt']*syn_u[v]*z_i) \
-			- prev_eps[v]['su'] * c['dt'] * syn_x[v] * z_i
+			  prev_eps[v]['sx'] * (1 - stp_alpha - syn_u[v]*z_i) \
+			- prev_eps[v]['su'] * syn_x[v] * z_i
 
 		# Calculate eps_syn_u
 		eps[v]['su'] = \
-			  prev_eps[v]['su'] * (1 - stp_alpha + c['dt']*stp_U*z_i)
+			  prev_eps[v]['su'] * (1 - stp_alpha - stp_U*z_i)
 
 	return eps

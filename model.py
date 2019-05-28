@@ -221,7 +221,7 @@ class Model:
 
 		# Calculate h, the pseudo-derivative (Eq. 5, ~24, 20/21)
 		# Bellec et al., 2018b
-		h = par['gamma_psd'] * cp.maximum(0., 1 - cp.abs((st['v']-self.con_dict['adex']['V_T'])/par['pseudo_th']))
+		h = par['gamma_psd'] * cp.maximum(0., 1 - cp.abs((st['v']-(par['betagrad']+self.con_dict['adex']['V_T']))/par['pseudo_th']))
 
 		return z_j, y, h, st
 
