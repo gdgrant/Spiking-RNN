@@ -1,7 +1,7 @@
 from imports import *
 from parameters import par
 
-def calculate_dynamics(prev_eps, x, z, z_prev, st, h, con_dict, eff_var):
+def calculate_dynamics(prev_eps, x, z, z_prev, st, h, h_prev, con_dict, eff_var):
 	""" Calculate the dynamics of the model
 		prev_eps = the epsilons of the previous time step
 		x        = presynaptic from input
@@ -9,6 +9,7 @@ def calculate_dynamics(prev_eps, x, z, z_prev, st, h, con_dict, eff_var):
 		z_prev   = presynaptic from recurrent
 		st       = dict holding all elements of model state
 		h        = pseudoderivative of z
+		h_prev   = h from latency time ago
 		con_dict = constants
 		var_dict = variables
 	"""
@@ -36,6 +37,7 @@ def calculate_dynamics(prev_eps, x, z, z_prev, st, h, con_dict, eff_var):
 	z            = z[:,cp.newaxis,:]
 	z_prev       = z_prev[:,:,cp.newaxis]
 	h            = h[:,cp.newaxis,:]
+	h_prev       = h_prev[:,cp.newaxis,:] if par['full_derivative'] else 0
 	v            = v[:,cp.newaxis,:]
 
 	# Apply necessary variable rules
@@ -90,15 +92,18 @@ def calculate_dynamics(prev_eps, x, z, z_prev, st, h, con_dict, eff_var):
 			  prev_eps[v]['i']  * c['beta'] \
 			+ prev_eps[v]['sx'] * one_minus_beta * syn_u[v] * eff_var[var_name][cp.newaxis,:,:] * z_i \
 			+ prev_eps[v]['su'] * one_minus_beta * syn_x[v] * eff_var[var_name][cp.newaxis,:,:] * z_i \
-			+ one_minus_beta * syn_x[v] * syn_u[v] * z_i
+			+ one_minus_beta * syn_x[v] * syn_u[v] * z_i \
+			+ h_prev * one_minus_beta * syn_u[v] * syn_x[v] * eff_var[var_name][cp.newaxis,:,:]
 
 		# Calculate eps_syn_x
 		eps[v]['sx'] = \
 			  prev_eps[v]['sx'] * (1 - stp_alpha - syn_u[v]*z_i) \
-			- prev_eps[v]['su'] * syn_x[v] * z_i
+			- prev_eps[v]['su'] * syn_x[v] * z_i \
+			+ h_prev * syn_u[v] * syn_x[v]
 
 		# Calculate eps_syn_u
 		eps[v]['su'] = \
-			  prev_eps[v]['su'] * (1 - stp_alpha - stp_U*z_i)
+			  prev_eps[v]['su'] * (1 - stp_alpha - stp_U*z_i) \
+			  + h_prev * stp_U * (1 - syn_u[v])
 
 	return eps

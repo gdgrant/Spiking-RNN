@@ -30,6 +30,7 @@ par = {
 
 	# Model architecture
 	'use_stp'                 : True,
+	'full_derivative'         : True,
 	'EI_prop'                 : 0.8,
 	'balance_EI'              : True,
 	'balance_EI_training'     : False,

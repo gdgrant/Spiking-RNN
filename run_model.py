@@ -24,7 +24,7 @@ n = 5
 r = int(sys.argv[1])
 for j in range(n*r, n*(r+1)):
 
-	savefn = '{}betagrad_{}dvapprox_{}neuron_var{}delay_v{:0>2}'.format(betagrad, int(dv_approx), par['n_hidden'], delay, j)
+	savefn = 'fullder_{}betagrad_{}dvapprox_{}neuron_var{}delay_v{:0>2}'.format(betagrad, int(dv_approx), par['n_hidden'], delay, j)
 
 	updates = {
 		'savefn'			: savefn,
