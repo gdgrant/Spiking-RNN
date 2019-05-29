@@ -35,12 +35,12 @@ def accuracy(output, target, mask, inc_fix=False):
 	return cp.sum(mask * (arg_output == arg_target))/cp.sum(mask)
 
 
-def synaptic_plasticity(syn_x, syn_u, I, c, use_stp):
+def synaptic_plasticity(syn_x, syn_u, z, c, use_stp):
 	""" Iterate the synaptic plasticity algorithm (if required) """
 
 	if use_stp:
-		syn_x = syn_x + c['alpha_std']*(1-syn_x) - syn_u*syn_x*I
-		syn_u = syn_u + c['alpha_stf']*(c['U']-syn_u) + c['U']*(1-syn_u)*I
+		syn_x = syn_x + c['alpha_std']*(1-syn_x) - syn_u*syn_x*z
+		syn_u = syn_u + c['alpha_stf']*(c['U']-syn_u) + c['U']*(1-syn_u)*z
 		syn_x = cp.clip(syn_x, 0., 1.)
 		syn_u = cp.clip(syn_u, 0., 1.)
 
