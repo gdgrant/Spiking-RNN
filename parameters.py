@@ -17,7 +17,7 @@ par = {
 	# Training environment
 	'batch_size'              : 64,
 	'iterations'              : 2000,
-	'learning_rate'           : 1e-12,
+	'learning_rate'           : 1e-3,
 	'cell_type'               : 'adex',
 	'optimizer'               : 'adam',
 
@@ -52,7 +52,7 @@ par = {
 	# AdEx architecture
 	'exc_model'               : 'RS',
 	'inh_model'               : 'cNA',
-	'conductance_mult'        : 50e-12,
+	'current_multiplier'      : 1e-9,
 
 	# Synaptic plasticity setup
 	'tau_fast'                : 200,
@@ -77,7 +77,7 @@ par = {
 	'num_motion_dirs'         : 8,
 	'kappa'                   : 2.,
 	'tuning_height'           : 100.,
-	'response_multiplier'     : 2.,
+	'response_multiplier'     : 4.,
 	'num_rules'               : 1,
 	'fixation_on'             : True,
 
@@ -125,9 +125,8 @@ def make_weights_and_masks():
 	par['W_rnn_mask']   = 1 - np.eye(par['n_hidden'])
 	par['W_rnn_init']  *= par['W_rnn_mask']
 
-	par['W_in_init'] *= par['conductance_mult']
-	par['W_rnn_init'] *= par['conductance_mult']
-	# par['W_out_init'] *= par['conductance_mult']
+	par['W_in_init'] *= 50e-3
+	par['W_rnn_init'] *= 50e-3
 
 	# Remake W_in and mask if weight won't be trained
 	if not par['train_input_weights']:
@@ -145,7 +144,7 @@ def make_weights_and_masks():
 				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.17*par['n_hidden']/par['n_input']))))
 			par['W_in_const'][:,i:i+2] = y[:,np.newaxis]
 	
-		par['W_in_init'] = 20*par['conductance_mult']*par['W_in_const']
+		par['W_in_init'] = par['W_in_const']
 		par['W_in_mask'] = np.ones_like(par['W_in_mask'])
 
 
@@ -243,9 +242,9 @@ def update_dependencies():
 
 		for (k0, v_exc), (k1, v_inh) in zip(par[par['exc_model']].items(), par[par['inh_model']].items()):
 			assert(k0 == k1)
-			par_matrix = np.ones([1,par['n_hidden']])
-			par_matrix[:,:par['n_EI']] *= v_exc
-			par_matrix[:,par['n_EI']:] *= v_inh
+			par_matrix = np.ones([1,1,par['n_hidden']])
+			par_matrix[:,:,:par['n_EI']] *= v_exc
+			par_matrix[:,:,par['n_EI']:] *= v_inh
 			par['adex'][k0] = par_matrix
 
 		# par['adex'] = par['RS']
@@ -255,6 +254,7 @@ def update_dependencies():
 
 		par['adex']['beta']  = np.exp(-par['dt']/par['tau_hid'])
 		par['adex']['kappa'] = np.exp(-par['dt']/par['tau_out'])
+		par['adex']['mu']    = par['current_multiplier']
 
 
 	elif par['cell_type'] == 'lif':
