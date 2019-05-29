@@ -7,16 +7,17 @@ from imports import *
 def run_adex(V, w, I, constants):
 	""" Run one step of the AdEx algorithm """
 
-	V_next      = adex_membrane(V, w, I, constants)
+	I_eff = I * constants['mu']
+
+	V_next      = adex_membrane(V, w, I_eff, constants)
 	w_next      = adex_adaptation(V, w, constants)
 	V, w, spike = adex_spike(V_next, w_next, constants)
 
-	return V, w, spike
+	return V, w, cp.squeeze(spike)
 
 
 def adex_membrane(V, w, I, c):
 	""" Calculate the new membrane potential """
-
 
 	term1 = I + c['g']*c['D']*cp.exp((V-c['V_T'])/c['D'])
 	term2 = w + c['g']*(V-c['E'])
