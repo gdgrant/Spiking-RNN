@@ -77,7 +77,7 @@ par = {
 	'num_motion_dirs'         : 8,
 	'kappa'                   : 2.,
 	'tuning_height'           : 100.,
-	'response_multiplier'     : 4.,
+	'response_multiplier'     : 2.,
 	'num_rules'               : 1,
 	'fixation_on'             : True,
 
