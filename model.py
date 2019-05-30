@@ -360,49 +360,12 @@ def main():
 		info_str1 = 'Full Acc: {:5.3f} | Mean Spiking: {:5.3f} Hz'.format(full_accuracy, mean_spiking)
 		print('Aggregating data...', end='\r')
 
-		V_min = to_cpu(model.v[:,0,:,:].T.min())
-
+		
 		if i%50==0:
-			fig, ax = plt.subplots(4,1, figsize=(15,11), sharex=True)
-			ax[0].imshow(to_cpu(model.input_data[:,0,:].T), aspect='auto')
-			ax[0].set_title('Input Data')
-			ax[1].imshow(to_cpu((model.input_data[:,0,:] @ model.eff_var['W_in']).T), aspect='auto')
-			ax[1].set_title('Projected Inputs')
-			ax[2].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
-			ax[2].set_title('Spiking')
-			ax[3].imshow(to_cpu(model.v[:,0,0,:].T), aspect='auto', clim=(V_min,0.))
-			ax[3].set_title('Membrane Voltage ($(V_r = {:5.3f}), {:5.3f} \\leq V_j^t \\leq 0$)'.format(par['adex']['V_r'].min(), V_min))
-
-			ax[0].set_ylabel('Input Neuron')
-			ax[1].set_ylabel('Hidden Neuron')
-			ax[2].set_ylabel('Hidden Neuron')
-			ax[3].set_ylabel('Hidden Neuron')
-
-			plt.savefig('./savedir/{}_activity_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
-			if par['save_pdfs']:
-				plt.savefig('./savedir/{}_activity_iter{:0>6}.pdf'.format(par['savefn'], i), bbox_inches='tight')
-			plt.clf()
-			plt.close()
-
-
+			pf.activity_plots(i, model)
+			
 			if i != 0:
-				fig, ax = plt.subplots(1,1, figsize=(8,8))
-				ax.plot(iter_record, full_acc_record, label='Full Accuracy')
-				ax.plot(iter_record, task_acc_record, label='Match/Nonmatch Accuracy')
-				ax.axhline(0.5, c='k', ls='--', label='Match/Nonmatch Chance Level')
-				ax.legend(loc='upper left')
-				ax.set_xlabel('Iteration')
-				ax.set_ylabel('Accuracy')
-				ax.set_title('Accuracy Training Curve')
-				ax.set_ylim(0,1)
-				ax.set_xlim(0,i)
-				ax.grid()
-
-				plt.savefig('./savedir/{}_training_curve_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
-				if par['save_pdfs']:
-					plt.savefig('./savedir/{}_training_curve_iter{:0>6}.pdf'.format(par['savefn'], i), bbox_inches='tight')
-				plt.clf()
-				plt.close()
+				pf.training_curve(i, iter_record, full_acc_record, task_acc_record)
 	
 			if i%100 == 0:
 				model.visualize_delta(i)
@@ -415,14 +378,13 @@ def main():
 			model.run_model(trial_info, testing=True)
 			model.show_output_behavior(i, trial_info['match'], trial_info['timings'])
 
-		if i%100 == 0:
-			if np.mean(task_acc_record[-100:]) > 0.9:
-				print('\nMean accuracy greater than 0.9 over last 100 iters.')
-				print('Moving on to next model.\n')
-				break
-
 		# Print output info (after all saving of data is complete)
 		print(info_str0 + info_str1)
+
+		if i%100 == 0:
+			if np.mean(task_acc_record[-100:]) > 0.9:
+				print('\nMean accuracy greater than 0.9 over last 100 iters.\nMoving on to next model.\n')
+				break
 
 
 if __name__ == '__main__':
