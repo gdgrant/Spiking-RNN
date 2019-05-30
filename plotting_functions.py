@@ -69,3 +69,50 @@ def visualize_delta(i, var_dict, grad_dict):
 			plt.savefig('./savedir/{}_delta_{}_iter{:0>6}.pdf'.format(par['savefn'], n, i), bbox_inches='tight')
 		plt.clf()
 		plt.close()
+
+
+def activity_plots(i, model):
+
+	V_min = to_cpu(model.v[:,0,:,:].T.min())
+
+	fig, ax = plt.subplots(4,1, figsize=(15,11), sharex=True)
+	ax[0].imshow(to_cpu(model.input_data[:,0,:].T), aspect='auto')
+	ax[0].set_title('Input Data')
+	ax[1].imshow(to_cpu((model.input_data[:,0,:] @ model.eff_var['W_in']).T), aspect='auto')
+	ax[1].set_title('Projected Inputs')
+	ax[2].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
+	ax[2].set_title('Spiking')
+	ax[3].imshow(to_cpu(model.v[:,0,0,:].T), aspect='auto', clim=(V_min,0.))
+	ax[3].set_title('Membrane Voltage ($(V_r = {:5.3f}), {:5.3f} \\leq V_j^t \\leq 0$)'.format(par['adex']['V_r'].min(), V_min))
+
+	ax[0].set_ylabel('Input Neuron')
+	ax[1].set_ylabel('Hidden Neuron')
+	ax[2].set_ylabel('Hidden Neuron')
+	ax[3].set_ylabel('Hidden Neuron')
+
+	plt.savefig('./savedir/{}_activity_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
+	if par['save_pdfs']:
+		plt.savefig('./savedir/{}_activity_iter{:0>6}.pdf'.format(par['savefn'], i), bbox_inches='tight')
+	plt.clf()
+	plt.close()
+
+
+def training_curve(i, iter_record, full_acc_record, task_acc_record):
+	
+	fig, ax = plt.subplots(1,1, figsize=(8,8))
+	ax.plot(iter_record, full_acc_record, label='Full Accuracy')
+	ax.plot(iter_record, task_acc_record, label='Match/Nonmatch Accuracy')
+	ax.axhline(0.5, c='k', ls='--', label='Match/Nonmatch Chance Level')
+	ax.legend(loc='upper left')
+	ax.set_xlabel('Iteration')
+	ax.set_ylabel('Accuracy')
+	ax.set_title('Accuracy Training Curve')
+	ax.set_ylim(0,1)
+	ax.set_xlim(0,i)
+	ax.grid()
+
+	plt.savefig('./savedir/{}_training_curve_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
+	if par['save_pdfs']:
+		plt.savefig('./savedir/{}_training_curve_iter{:0>6}.pdf'.format(par['savefn'], i), bbox_inches='tight')
+	plt.clf()
+	plt.close()
