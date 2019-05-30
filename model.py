@@ -31,7 +31,7 @@ class Model:
 		""" Import constants from CPU to GPU """
 
 		constants  = ['dt', 'dt_sec', 'adex', 'lif', 'w_init']
-		constants += ['EI_vector', 'EI_matrix']
+		constants += ['EI_vector', 'EI_matrix', 'EI_mask_exh', 'EI_mask_inh']
 		constants += ['W_in_mask', 'W_rnn_mask', 'W_out_mask', 'b_out_mask']
 
 		if par['use_stp']:
@@ -291,9 +291,9 @@ class Model:
 			self.grad_dict['W_in'] += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['inp'], axis=0)
 		self.grad_dict['W_rnn']    += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['rec'], axis=0)
 		if par['balance_EI_training']:
-			self.grad_dict['W_rnn']					+= par['EI_mask_exh'] @ cp.mean(self.EI_balance_delta_exh, axis=0)
+			self.grad_dict['W_rnn']					+= self.con_dict['EI_mask_exh'] @ cp.mean(self.EI_balance_delta_exh, axis=0)
 			self.grad_dict['W_rnn'][:par['n_EI'],:] -= self.EI_exh_limit
-			self.grad_dict['W_rnn']					+= par['EI_mask_inh'] @ cp.mean(self.EI_balance_delta_inh, axis=0)
+			self.grad_dict['W_rnn']					+= self.con_dict['EI_mask_inh'] @ cp.mean(self.EI_balance_delta_inh, axis=0)
 		self.grad_dict['W_out']    += cp.mean(L_out[:,cp.newaxis,:] * self.kappa['out'], axis=0)
 		self.grad_dict['b_out']    += cp.mean(L_out[:,cp.newaxis,:], axis=0)
 
