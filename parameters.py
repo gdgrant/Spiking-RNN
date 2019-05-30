@@ -140,13 +140,17 @@ def make_weights_and_masks():
 		z = beta/np.exp(kappa)
 		for i in range(0, par['n_hidden'], 4):
 			if i < par['n_EI']:
-				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.18*par['n_hidden']/par['n_input']))))
+				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.22*par['n_hidden']/par['n_input']))))
 			else:
-				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.62*par['n_hidden']/par['n_input']))))
+				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.82*par['n_hidden']/par['n_input']))))
 			par['W_in_const'][:,i:i+2] = y[:,np.newaxis]
 	
 		par['W_in_init'] = par['W_in_const']
 		par['W_in_mask'] = np.ones_like(par['W_in_mask'])
+
+		plt.imshow(par['W_in_init'], aspect='auto')
+		plt.show()
+		quit()
 		
 
 def update_parameters(updates, verbose=True, update_deps=True):
