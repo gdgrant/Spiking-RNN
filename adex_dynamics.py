@@ -105,7 +105,7 @@ def calculate_dynamics(prev_eps, st, x, z, z_prev, z_prev_prev, syn_x_prev, h, h
 	### Second-order corrections to recurrent epsilons
 
 	eps['rec']['ir'] += h_prev * one_minus_beta * syn_x * syn_u * eff_var['W_rnn'][cp.newaxis,:,:] \
-		* z_prev_prev * one_minus_beta * syn_x_prev
+		* z_prev_prev * one_minus_beta * syn_x_prev * syn_u_prev
 	eps['rec']['sx'] += h_prev * syn_x * syn_u
 	eps['rec']['su'] += h_prev * con_dict['U'] * (1 - syn_u)
 
