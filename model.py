@@ -175,8 +175,8 @@ class Model:
 
 			# Get recurrent spikes from par['latency'] time steps ago
 			neuron_inds = np.arange(par['n_hidden']).astype(np.int64)
-			z_L  = self.z[t-(1+par['latency_inds']),:,neuron_inds].T
-			z_2L = self.z[t-(1+2*par['latency_inds']),:,neuron_inds].T
+			z_L  = self.z[t-par['latency_inds'],:,neuron_inds].T
+			z_2L = self.z[t-2*par['latency_inds'],:,neuron_inds].T
 
 			# print(self.z[t].shape, z_L.shape)
 
@@ -191,8 +191,8 @@ class Model:
 			self.su[t,...] = state_dict['su']
 			
 			# Calculate latency h and latency syn_x
-			h_L  = self.h[t-(1+par['latency_inds']),:,:,neuron_inds].transpose(1,2,0)
-			sx_L = self.sx[t-(1+par['latency_inds']),:,neuron_inds,:].transpose(1,0,2)
+			h_L  = self.h[t-par['latency_inds'],:,:,neuron_inds].transpose(1,2,0)
+			sx_L = self.sx[t-par['latency_inds'],:,neuron_inds,:].transpose(1,0,2)
 
 			# Only run updates if training
 			if not testing:
