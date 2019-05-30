@@ -188,16 +188,17 @@ class Model:
 			self.w[t,...]  = state_dict['w']
 			self.sx[t,...] = state_dict['sx']
 			self.su[t,...] = state_dict['su']
-			
+
 			# Calculate latency h and latency syn_x
 			h_L  = self.h[t-(1+par['latency_inds']),:,:,neuron_inds].transpose(1,2,0)
 			sx_L = self.sx[t-(1+par['latency_inds']),:,neuron_inds,:].transpose(1,0,2)
+			su_L = self.su[t-(1+par['latency_inds']),:,neuron_inds,:].transpose(1,0,2)
 
 			# Only run updates if training
 			if not testing:
 
 				# Update eligibilities and traces
-				self.update_eligibility(state_dict, x, self.z[t,...], z_L, z_2L, sx_L, self.h[t,...], h_L, t)
+				self.update_eligibility(state_dict, x, self.z[t,...], z_L, z_2L, sx_L, su_L, self.h[t,...], h_L, t)
 
 				# Update pending weight changes
 				self.calculate_weight_updates(t)
@@ -233,11 +234,11 @@ class Model:
 		return z_j, y, h, st
 
 
-	def update_eligibility(self, state_dict, x, z, z_prev, z_prev_prev, syn_x_prev, h, h_prev, t):
+	def update_eligibility(self, state_dict, x, z, z_prev, z_prev_prev, syn_x_prev, syn_u_prev, h, h_prev, t):
 
 		# Calculate the model dynamics and generate new epsilons
 		self.eps = calculate_dynamics(self.eps, state_dict, x, z, z_prev, \
-			z_prev_prev, syn_x_prev, h, h_prev, self.con_dict, self.eff_var)
+			z_prev_prev, syn_x_prev, syn_u_prev, h, h_prev, self.con_dict, self.eff_var)
 
 		# Update and modulate e's
 		e_inp = h * self.eps['inp']['v']
@@ -403,7 +404,7 @@ def main():
 					plt.savefig('./savedir/{}_training_curve_iter{:0>6}.pdf'.format(par['savefn'], i), bbox_inches='tight')
 				plt.clf()
 				plt.close()
-	
+
 			if i%100 == 0:
 				model.visualize_delta(i)
 
