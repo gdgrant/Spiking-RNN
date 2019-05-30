@@ -20,15 +20,15 @@ def print_parameters():
 delay = 500
 dv_approx = True
 pseudoth = 10
-betagrad = 0
 n = 5
 r = int(sys.argv[1])
 for j in range(n*r, n*(r+1)):
 
-	savefn = 'fixedinp_no2nd_{}pseudoth_{}neuron_var{}delay_v{:0>2}'.format(pseudoth, par['n_hidden'], delay, j)
+	savefn = 'taskswitch_fixedinp_no2nd_{}pseudoth_{}neuron_var{}delay_v{:0>2}'.format(pseudoth, par['n_hidden'], delay, j)
 
 	updates = {
 		'savefn'			: savefn,
+		'task'				: 'dmswitch',
 		'dv_approx'			: True,
 		'betagrad'			: 0.,
 		'psudo_th'			: pseudoth*1e-3,
