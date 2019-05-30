@@ -71,7 +71,7 @@ par = {
 	'rnn_gamma'               : 0.8,
 	'output_gamma'            : 0.04,
 	'rnn_cap'                 : 0.006,
-	'noise_in_sd'             : 0.5,
+	'noise_in_sd'             : 0.75,
 
 	# Task setup
 	'task'                    : 'dmc',
@@ -87,12 +87,12 @@ par = {
 	'catch_prob'              : 0.1,
 
 	# Task timings
-	'dead_time'               : 20,
+	'dead_time'               : 50,
 	'fix_time'                : 30,
 	'sample_time'             : 150,
 	'delay_time'              : 120,
 	'test_time'               : 150,
-	'mask_time'               : 20,
+	'mask_time'               : 50,
 
 }
 
