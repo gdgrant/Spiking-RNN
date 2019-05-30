@@ -19,12 +19,12 @@ def print_parameters():
 
 delay = 300
 dv_approx = True
-betagrad = 10
+betagrad = 0
 n = 5
 r = int(sys.argv[1])
 for j in range(n*r, n*(r+1)):
 
-	savefn = 'fullder_{}betagrad_{}dvapprox_{}neuron_var{}delay_v{:0>2}'.format(betagrad, int(dv_approx), par['n_hidden'], delay, j)
+	savefn = 'fixedinp_{}betagrad_{}dvapprox_{}neuron_var{}delay_v{:0>2}'.format(betagrad, int(dv_approx), par['n_hidden'], delay, j)
 
 	updates = {
 		'savefn'			: savefn,
