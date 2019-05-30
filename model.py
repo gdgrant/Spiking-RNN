@@ -13,6 +13,7 @@ import plotting_functions as pf
 from adex import run_adex
 from adex_dynamics import calculate_dynamics
 
+import copy
 
 class Model:
 
@@ -30,7 +31,7 @@ class Model:
 		""" Import constants from CPU to GPU """
 
 		constants  = ['dt', 'dt_sec', 'adex', 'lif', 'w_init']
-		constants += ['EI_vector', 'EI_matrix']
+		constants += ['EI_vector', 'EI_matrix', 'EI_mask_exh', 'EI_mask_inh']
 		constants += ['W_in_mask', 'W_rnn_mask', 'W_out_mask', 'b_out_mask']
 
 		if par['use_stp']:
@@ -164,7 +165,7 @@ class Model:
 		su = self.con_dict['syn_u_init'] if par['use_stp'] else 1.
 
 		# Make state dictionary
-		state_dict = {'v':v, 'w':w, 'ia':ia, 'ir':ir, 'sx':sx, 'su':su}
+		state_dict = {'v':v, 'w':w, 'ia':ia, 'ir':ir, 'ja':copy.copy(ia), 'jr':copy.copy(ir), 'sx':sx, 'su':su}
 
 		# Loop across time
 		for t in range(par['num_time_steps']):
@@ -180,7 +181,7 @@ class Model:
 			# print(self.z[t].shape, z_L.shape)
 
 			# Run cell step
-			self.z[t,...], self.y[t,...], self.h[t,...], state_dict = \
+			self.z[t,...], self.y[t,...], self.h[t,...], state_dict, I = \
 				self.recurrent_cell(x, z_L, self.y[t-1,...], state_dict)
 
 			# Record cell state
@@ -198,7 +199,7 @@ class Model:
 			if not testing:
 
 				# Update eligibilities and traces
-				self.update_eligibility(state_dict, x, self.z[t,...], z_L, z_2L, sx_L, su_L, self.h[t,...], h_L, t)
+				self.update_eligibility(state_dict, x, self.z[t,...], z_L, z_2L, sx_L, su_L, self.h[t,...], h_L, t, I)
 
 				# Update pending weight changes
 				self.calculate_weight_updates(t)
@@ -220,6 +221,11 @@ class Model:
 		st['ir'] = self.con_dict['adex']['beta'] * st['ir'] + \
 			(1-self.con_dict['adex']['beta']) * self.eff_var['W_rnn'] * st['sx'] * st['su'] * z_i[:,:,cp.newaxis]
 
+		st['ja'] = self.con_dict['adex']['beta'] * st['ja'] + \
+			(1-self.con_dict['adex']['beta']) * x
+		st['jr'] = self.con_dict['adex']['beta'] * st['jr'] + \
+			(1-self.con_dict['adex']['beta']) * st['sx'] * st['su'] * z_i[:,:,cp.newaxis]
+
 		# Update the synaptic plasticity state (recurrent only; input is static)
 		st['sx'], st['su'] = \
 			synaptic_plasticity(st['sx'], st['su'], z_i[:,:,cp.newaxis], self.con_dict, par['use_stp'])
@@ -231,10 +237,10 @@ class Model:
 		# Bellec et al., 2018b
 		h = par['gamma_psd'] * cp.maximum(0., 1 - cp.abs((st['v']-(par['betagrad']+self.con_dict['adex']['V_T']))/par['pseudo_th']))
 
-		return z_j, y, h, st
+		return z_j, y, h, st, I
 
 
-	def update_eligibility(self, state_dict, x, z, z_prev, z_prev_prev, syn_x_prev, syn_u_prev, h, h_prev, t):
+	def update_eligibility(self, state_dict, x, z, z_prev, z_prev_prev, syn_x_prev, syn_u_prev, h, h_prev, t, I):
 
 		# Calculate the model dynamics and generate new epsilons
 		self.eps = calculate_dynamics(self.eps, state_dict, x, z, z_prev, \
@@ -254,11 +260,21 @@ class Model:
 
 		# EI balance
 		if par['balance_EI_training']:
-			term1 = z[:,:,cp.newaxis] * h * state_dict['sx'] * state_dict['su']
-			term2 = z[:,cp.newaxis,:] * (1 / (c['C']/c['dt'] + c['g']*(cp.exp((state_dict['v']-c['V_T'])/c['D'])-1))) / c['beta']
-			self.EI_balance_delta = term1 * term2
-			self.EI_balance_delta = cp.matmul(self.con_dict['EI_matrix'], self.EI_balance_delta)
-
+			h = np.squeeze(h, axis = 1)
+			const = np.squeeze(c['dt']/c['C'], axis = [0,1])
+			# print('h: ', h.shape)
+			# print('z: ', z.shape)
+			# print('const: ', const.shape)
+			# print('J: ', state_dict['jr'].shape)
+			# print('I: ', I.shape)
+			#self.EI_balance_delta = (z * h * syn_x * syn_u)[:,:,cp.newaxis] * (z[cp.newaxis,:,:] * (1 / (c['C'][s]/c['dt'] + c['g'][s]*(cp.exp((state_dict['v']-c['V_T'][s])/c['D'][s])-1))) / c['beta']).reshape((par['batch_size'],1,500))
+			#self.EI_balance_delta = cp.matmul(self.con_dict['EI_matrix'], self.EI_balance_delta)
+			self.EI_balance_delta_exh = (const * h * (1 - z))[:,np.newaxis,:] * state_dict['jr']
+			self.EI_balance_delta_inh = I * state_dict['jr']
+			self.EI_exh_limit = 0.001 * cp.sum(self.eff_var['W_rnn'][:par['n_EI'],:], axis=0)
+			# print('EI_balance_delta_exh: ', self.EI_balance_delta_exh.shape)
+			# print('EI_balance_delta_inh: ', self.EI_balance_delta_inh.shape)
+			# print('EI_exh_limit: ', self.EI_exh_limit.shape)
 
 	def calculate_weight_updates(self, t):
 
@@ -276,7 +292,9 @@ class Model:
 			self.grad_dict['W_in'] += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['inp'], axis=0)
 		self.grad_dict['W_rnn']    += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['rec'], axis=0)
 		if par['balance_EI_training']:
-			self.grad_dict['W_rnn']    += cp.mean(self.EI_balance_delta, axis=0)
+			self.grad_dict['W_rnn']					+= self.con_dict['EI_mask_exh'] @ cp.mean(self.EI_balance_delta_exh, axis=0)
+			self.grad_dict['W_rnn'][:par['n_EI'],:] -= self.EI_exh_limit
+			self.grad_dict['W_rnn']					+= self.con_dict['EI_mask_inh'] @ cp.mean(self.EI_balance_delta_inh, axis=0)
 		self.grad_dict['W_out']    += cp.mean(L_out[:,cp.newaxis,:] * self.kappa['out'], axis=0)
 		self.grad_dict['b_out']    += cp.mean(L_out[:,cp.newaxis,:], axis=0)
 
@@ -361,49 +379,12 @@ def main():
 		info_str1 = 'Full Acc: {:5.3f} | Mean Spiking: {:5.3f} Hz'.format(full_accuracy, mean_spiking)
 		print('Aggregating data...', end='\r')
 
-		V_min = to_cpu(model.v[:,0,:,:].T.min())
 
 		if i%50==0:
-			fig, ax = plt.subplots(4,1, figsize=(15,11), sharex=True)
-			ax[0].imshow(to_cpu(model.input_data[:,0,:].T), aspect='auto')
-			ax[0].set_title('Input Data')
-			ax[1].imshow(to_cpu((model.input_data[:,0,:] @ model.eff_var['W_in']).T), aspect='auto')
-			ax[1].set_title('Projected Inputs')
-			ax[2].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
-			ax[2].set_title('Spiking')
-			ax[3].imshow(to_cpu(model.v[:,0,0,:].T), aspect='auto', clim=(V_min,0.))
-			ax[3].set_title('Membrane Voltage ($(V_r = {:5.3f}), {:5.3f} \\leq V_j^t \\leq 0$)'.format(par['adex']['V_r'].min(), V_min))
-
-			ax[0].set_ylabel('Input Neuron')
-			ax[1].set_ylabel('Hidden Neuron')
-			ax[2].set_ylabel('Hidden Neuron')
-			ax[3].set_ylabel('Hidden Neuron')
-
-			plt.savefig('./savedir/{}_activity_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
-			if par['save_pdfs']:
-				plt.savefig('./savedir/{}_activity_iter{:0>6}.pdf'.format(par['savefn'], i), bbox_inches='tight')
-			plt.clf()
-			plt.close()
-
+			pf.activity_plots(i, model)
 
 			if i != 0:
-				fig, ax = plt.subplots(1,1, figsize=(8,8))
-				ax.plot(iter_record, full_acc_record, label='Full Accuracy')
-				ax.plot(iter_record, task_acc_record, label='Match/Nonmatch Accuracy')
-				ax.axhline(0.5, c='k', ls='--', label='Match/Nonmatch Chance Level')
-				ax.legend(loc='upper left')
-				ax.set_xlabel('Iteration')
-				ax.set_ylabel('Accuracy')
-				ax.set_title('Accuracy Training Curve')
-				ax.set_ylim(0,1)
-				ax.set_xlim(0,i)
-				ax.grid()
-
-				plt.savefig('./savedir/{}_training_curve_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
-				if par['save_pdfs']:
-					plt.savefig('./savedir/{}_training_curve_iter{:0>6}.pdf'.format(par['savefn'], i), bbox_inches='tight')
-				plt.clf()
-				plt.close()
+				pf.training_curve(i, iter_record, full_acc_record, task_acc_record)
 
 			if i%100 == 0:
 				model.visualize_delta(i)
@@ -416,14 +397,13 @@ def main():
 			model.run_model(trial_info, testing=True)
 			model.show_output_behavior(i, trial_info['match'], trial_info['timings'])
 
-		if i%100 == 0:
-			if np.mean(task_acc_record[-100:]) > 0.9:
-				print('\nMean accuracy greater than 0.9 over last 100 iters.')
-				print('Moving on to next model.\n')
-				break
-
 		# Print output info (after all saving of data is complete)
 		print(info_str0 + info_str1)
+
+		if i%100 == 0:
+			if np.mean(task_acc_record[-100:]) > 0.9:
+				print('\nMean accuracy greater than 0.9 over last 100 iters.\nMoving on to next model.\n')
+				break
 
 
 if __name__ == '__main__':

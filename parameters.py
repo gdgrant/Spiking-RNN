@@ -24,7 +24,7 @@ par = {
 	# Optimization parameters
 	'gamma_psd'               : 0.3,
 	'L_spike_cost'            : 10.,
-	'train_input_weights'     : True,
+	'train_input_weights'     : False,
 	'pseudo_th'               : 10e-3,
 	'dv_approx'               : True,
 
@@ -64,6 +64,7 @@ par = {
 	'adam_beta1'              : 0.9,
 	'adam_beta2'              : 0.999,
 	'adam_epsilon'            : 1e-8,
+	'betagrad'				  : 0,
 
 	# Noise and weight scaling
 	'input_gamma'             : 0.7,
@@ -139,14 +140,14 @@ def make_weights_and_masks():
 		z = beta/np.exp(kappa)
 		for i in range(0, par['n_hidden'], 4):
 			if i < par['n_EI']:
-				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.05*par['n_hidden']/par['n_input']))))
+				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.18*par['n_hidden']/par['n_input']))))
 			else:
-				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.17*par['n_hidden']/par['n_input']))))
+				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.62*par['n_hidden']/par['n_input']))))
 			par['W_in_const'][:,i:i+2] = y[:,np.newaxis]
 	
 		par['W_in_init'] = par['W_in_const']
 		par['W_in_mask'] = np.ones_like(par['W_in_mask'])
-
+		
 
 def update_parameters(updates, verbose=True, update_deps=True):
 	if verbose:
@@ -180,6 +181,14 @@ def update_dependencies():
 	par['EI_vector'] = np.ones(par['n_hidden'])
 	par['EI_vector'][par['n_EI']:] *= -1
 	par['EI_matrix'] = np.diag(par['EI_vector'])
+
+	par['exh_vector'] = np.ones(par['n_hidden'])
+	par['exh_vector'][par['n_EI']:] *= 0
+	par['EI_mask_exh'] = np.diag(par['exh_vector'])
+
+	par['inh_vector'] = np.ones(par['n_hidden'])
+	par['inh_vector'][:par['n_EI']] *= 0
+	par['EI_mask_inh'] = np.diag(par['inh_vector'])
 
 	# Initialize weights and generate the associated masks
 	make_weights_and_masks()
