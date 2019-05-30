@@ -38,7 +38,7 @@ par = {
 	# Network shape
 	'num_motion_tuned'        : 96,
 	'num_fix_tuned'           : 8,
-	'num_rule_tuned'          : 0,
+	'num_rule_tuned'          : 16,
 	'num_receptive_fields'    : 1,
 	'n_hidden'                : 500,
 	'n_output'                : 3,
@@ -79,7 +79,7 @@ par = {
 	'kappa'                   : 2.,
 	'tuning_height'           : 100.,
 	'response_multiplier'     : 2.,
-	'num_rules'               : 1,
+	'num_rules'               : 2,
 	'fixation_on'             : True,
 
 	# Task variable parameters
