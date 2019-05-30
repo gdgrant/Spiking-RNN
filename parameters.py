@@ -147,10 +147,6 @@ def make_weights_and_masks():
 	
 		par['W_in_init'] = par['W_in_const']
 		par['W_in_mask'] = np.ones_like(par['W_in_mask'])
-
-		plt.imshow(par['W_in_init'], aspect='auto')
-		plt.show()
-		quit()
 		
 
 def update_parameters(updates, verbose=True, update_deps=True):
