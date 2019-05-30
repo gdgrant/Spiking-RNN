@@ -64,6 +64,7 @@ par = {
 	'adam_beta1'              : 0.9,
 	'adam_beta2'              : 0.999,
 	'adam_epsilon'            : 1e-8,
+	'betagrad'				  : 0,
 
 	# Noise and weight scaling
 	'input_gamma'             : 0.7,
@@ -180,6 +181,14 @@ def update_dependencies():
 	par['EI_vector'] = np.ones(par['n_hidden'])
 	par['EI_vector'][par['n_EI']:] *= -1
 	par['EI_matrix'] = np.diag(par['EI_vector'])
+
+	par['exh_vector'] = np.ones(par['n_hidden'])
+	par['exh_vector'][par['n_EI']:] *= 0
+	par['EI_mask_exh'] = np.diag(par['exh_vector'])
+
+	par['inh_vector'] = np.ones(par['n_hidden'])
+	par['inh_vector'][:par['n_EI']] *= 0
+	par['EI_mask_inh'] = np.diag(par['inh_vector'])
 
 	# Initialize weights and generate the associated masks
 	make_weights_and_masks()
