@@ -281,5 +281,12 @@ def update_dependencies():
 		par['lif']['kappa'] = np.exp(-par['dt_sec']/par['lif']['tau_o']).astype(np.float32)
 
 
+def check_for_float64():
+
+	for key, val in par.items():
+		if type(val) == np.ndarray and val.dtype == np.float64:
+			raise Exception('Parameter \'{}\' is of dtype float64.  Use float32 instead.'.format(val))
+
 update_dependencies()
+check_for_float64()
 print('--> Parameters loaded.\n')
