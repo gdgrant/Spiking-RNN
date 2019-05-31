@@ -204,7 +204,8 @@ class Model:
 			if not testing:
 
 				# Update eligibilities and traces
-				self.update_eligibility(state_dict, x, self.z[t,...], z_L, z_2L, sx_L, su_L, self.h[t,...], h_L, t, I)
+				self.update_eligibility(state_dict, x, self.z[t,...], z_L, z_2L, sx_L, su_L, \
+					self.h[t,...], self.h[t-1,...], h_L, t, I)
 
 				# Update pending weight changes
 				self.calculate_weight_updates(t)
@@ -214,7 +215,7 @@ class Model:
 		""" Compute one iteration of the recurrent network, progressing the
 			internal state by one time step. """
 
-
+		# Update the input traces based on presynaptic spikes
 		st['ia'] = self.con_dict['adex']['beta'] * st['ia'] + \
 			(1-self.con_dict['adex']['beta']) * self.eff_var['W_in'] * x
 		st['ir'] = self.con_dict['adex']['beta'] * st['ir'] + \
@@ -235,14 +236,6 @@ class Model:
 		# Update the AdEx cell state with the input current
 		st['v'], st['w'], z_j = run_adex(st['v'], st['w'], I, self.con_dict['adex'])
 
-		# Update the input traces based on presynaptic spikes
-
-
-
-
-
-
-
 		# Update output trace based on postsynaptic cell state (Eq. 12)
 		y = self.con_dict['adex']['kappa'] * y + z_j @ self.eff_var['W_out'] + self.eff_var['b_out']
 
@@ -253,11 +246,11 @@ class Model:
 		return z_j, y, h, st, I
 
 
-	def update_eligibility(self, state_dict, x, z, z_prev, z_prev_prev, syn_x_prev, syn_u_prev, h, h_prev, t, I):
+	def update_eligibility(self, state_dict, x, z, z_prev, z_prev_prev, syn_x_prev, syn_u_prev, h, h_1, h_prev, t, I):
 
 		# Calculate the model dynamics and generate new epsilons
 		self.eps = calculate_dynamics(self.eps, state_dict, x, z, z_prev, \
-			z_prev_prev, syn_x_prev, syn_u_prev, h, h_prev, self.con_dict, self.eff_var, self.var_dict)
+			z_prev_prev, syn_x_prev, syn_u_prev, h_1, h_prev, self.con_dict, self.eff_var, self.var_dict)
 
 		# Update and modulate e's
 		e_inp = h * self.eps['inp']['v']

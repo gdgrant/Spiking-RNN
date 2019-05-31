@@ -68,11 +68,11 @@ par = {
 	'betagrad'				  : 0,
 
 	# Noise and weight scaling
-	'input_gamma'             : 0.15,
-	'rnn_gamma'               : 0.1,
+	'input_gamma'             : 0.12,
+	'rnn_gamma'               : 0.08,
 	'output_gamma'            : 0.04,
 	'rnn_cap'                 : 0.006,
-	'noise_in_sd'             : 0.2,
+	'noise_in_sd'             : 4.,
 
 	# Task setup
 	'task'                    : 'dmc',
@@ -119,7 +119,7 @@ def make_weights_and_masks():
 	if par['EI_prop'] == 1.:
 		par['W_rnn_init'] = np.random.uniform(-par['rnn_gamma'], par['rnn_gamma'], size=[par['n_hidden'],par['n_hidden']])
 	else:
-		par['W_rnn_init'] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=[par['n_hidden'], par['n_hidden']])       
+		par['W_rnn_init'] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=[par['n_hidden'], par['n_hidden']])
 		if par['balance_EI']:
 			par['W_rnn_init'][par['n_EI']:,:] *= 1.8
 			par['W_rnn_init'][:,par['n_EI']:] *= 1.8
@@ -144,10 +144,10 @@ def make_weights_and_masks():
 			else:
 				y = z * np.exp(kappa*np.cos(2*np.pi*(i/(par['n_hidden']-par['n_EI']) + U/360)))
 			par['W_in_const'][:,i:i+1] = y[:,np.newaxis]
-	
+
 		par['W_in_init'] = par['W_in_const']
 		par['W_in_mask'] = np.ones_like(par['W_in_mask'])
-		
+
 
 def update_parameters(updates, verbose=True, update_deps=True):
 	if verbose:
