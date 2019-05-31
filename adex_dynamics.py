@@ -13,7 +13,7 @@ def calculate_dynamics(prev_eps, st, x, z, z_prev, z_prev_prev, syn_x_prev, syn_
 		con_dict = constants
 		var_dict = variables
 	"""
-	
+
 	### Unpack state dict
 	# v     = membrane voltage
 	# w     = adaptation current
@@ -103,10 +103,11 @@ def calculate_dynamics(prev_eps, st, x, z, z_prev, z_prev_prev, syn_x_prev, syn_
 
 
 	### Second-order corrections to recurrent epsilons
+	term1 = one_minus_beta * h_prev * one_minus_z_dt_mu_over_C * syn_x_prev * syn_u_prev * z_prev_prev * con_dict['EI_vector'][cp.newaxis,:,cp.newaxis]
+	term2 = one_minus_beta * syn_u  * syn_x * eff_var['W_rnn'][cp.newaxis,:,:]
+	eps['rec']['ir'] += cp.einsum('bij,bjk->bik', term1, term2)
 
-	eps['rec']['ir'] += h_prev * one_minus_beta * syn_x * syn_u * eff_var['W_rnn'][cp.newaxis,:,:] \
-		* z_prev_prev * one_minus_beta * syn_x_prev * syn_u_prev
-	eps['rec']['sx'] += h_prev * syn_x * syn_u
-	eps['rec']['su'] += h_prev * con_dict['U'] * (1 - syn_u)
+	#eps['rec']['sx'] += h_prev * syn_x * syn_u
+	#eps['rec']['su'] += h_prev * con_dict['U'] * (1 - syn_u)
 
 	return eps
