@@ -16,7 +16,7 @@ par = {
 
 	# Training environment
 	'batch_size'              : 64,
-	'iterations'              : 2000,
+	'iterations'              : 20000,
 	'learning_rate'           : 1e-3,
 	'cell_type'               : 'adex',
 	'optimizer'               : 'adam',
@@ -24,7 +24,7 @@ par = {
 	# Optimization parameters
 	'gamma_psd'               : 0.3,
 	'L_spike_cost'            : 10.,
-	'train_input_weights'     : False,
+	'train_input_weights'     : True,
 	'pseudo_th'               : 10e-3,
 	'dv_approx'               : True,
 
@@ -36,9 +36,9 @@ par = {
 	'balance_EI_training'     : False,
 
 	# Network shape
-	'num_motion_tuned'        : 96,
-	'num_fix_tuned'           : 8,
-	'num_rule_tuned'          : 16,
+	'num_motion_tuned'        : 100,
+	'num_fix_tuned'           : 5,
+	'num_rule_tuned'          : 20,
 	'num_receptive_fields'    : 1,
 	'n_hidden'                : 500,
 	'n_output'                : 3,
@@ -67,17 +67,17 @@ par = {
 	'betagrad'				  : 0,
 
 	# Noise and weight scaling
-	'input_gamma'             : 0.7,
-	'rnn_gamma'               : 0.8,
+	'input_gamma'             : 0.15,
+	'rnn_gamma'               : 0.1,
 	'output_gamma'            : 0.04,
 	'rnn_cap'                 : 0.006,
-	'noise_in_sd'             : 0.75,
+	'noise_in_sd'             : 0.2,
 
 	# Task setup
 	'task'                    : 'dmc',
 	'num_motion_dirs'         : 8,
 	'kappa'                   : 2.,
-	'tuning_height'           : 100.,
+	'tuning_height'           : 40.,
 	'response_multiplier'     : 2.,
 	'num_rules'               : 2,
 	'fixation_on'             : True,
@@ -88,11 +88,11 @@ par = {
 
 	# Task timings
 	'dead_time'               : 50,
-	'fix_time'                : 30,
+	'fix_time'                : 100,
 	'sample_time'             : 150,
 	'delay_time'              : 120,
-	'test_time'               : 150,
-	'mask_time'               : 50,
+	'test_time'               : 200,
+	'mask_time'               : 80,
 
 }
 
@@ -104,7 +104,7 @@ def make_weights_and_masks():
 		scale=1., size=[par['n_input'], par['n_hidden']])
 	par['W_in_mask'] = np.zeros_like(par['W_in_init'])
 	par['W_in_mask'][:,0:par['n_EI']:4] = 1.
-	par['W_in_mask'][:,1:par['n_EI']:4] = 1.
+	par['W_in_init'] *= par['W_in_mask']
 
 	# Make W_out and mask
 	par['W_out_init'] = np.random.uniform(-1., 1., size=[par['n_hidden'], par['n_output']])
@@ -120,14 +120,13 @@ def make_weights_and_masks():
 	else:
 		par['W_rnn_init'] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=[par['n_hidden'], par['n_hidden']])       
 		if par['balance_EI']:
-			par['W_rnn_init'][par['n_EI']:,:par['n_EI']] *= 2
-			par['W_rnn_init'][:par['n_EI'],par['n_EI']:] *= 2
+			par['W_rnn_init'][par['n_EI']:,:] *= 1.8
+			par['W_rnn_init'][:,par['n_EI']:] *= 1.8
 
 	par['W_rnn_mask']   = 1 - np.eye(par['n_hidden'])
 	par['W_rnn_init']  *= par['W_rnn_mask']
 
-	par['W_in_init'] *= 50e-3
-	par['W_rnn_init'] *= 50e-3
+	par['W_rnn_init'] = np.minimum(2., par['W_rnn_init'])
 
 	# Remake W_in and mask if weight won't be trained
 	if not par['train_input_weights']:
@@ -135,15 +134,15 @@ def make_weights_and_masks():
 		par['W_in_const'] = np.zeros_like(par['W_in_init'])
 		U = np.linspace(0, 360, par['n_input'])
 
-		beta = 0.2
-		kappa = 7.
+		beta = 0.1
+		kappa = 1.
 		z = beta/np.exp(kappa)
 		for i in range(0, par['n_hidden'], 4):
 			if i < par['n_EI']:
-				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.22*par['n_hidden']/par['n_input']))))
+				y = z * np.exp(kappa*np.cos(2*np.pi*(i/par['n_EI'] + U/360)))
 			else:
-				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.82*par['n_hidden']/par['n_input']))))
-			par['W_in_const'][:,i:i+2] = y[:,np.newaxis]
+				y = z * np.exp(kappa*np.cos(2*np.pi*(i/(par['n_hidden']-par['n_EI']) + U/360)))
+			par['W_in_const'][:,i:i+1] = y[:,np.newaxis]
 	
 		par['W_in_init'] = par['W_in_const']
 		par['W_in_mask'] = np.ones_like(par['W_in_mask'])
@@ -206,7 +205,8 @@ def update_dependencies():
 	# Generate time constants and noise values
 	par['dt_sec']       = par['dt']/1000
 	par['alpha_neuron'] = par['dt']/par['tau_hid']
-	par['noise_in']     = np.sqrt(2/par['alpha_neuron'])*par['noise_in_sd']
+	#par['noise_in']     = np.sqrt(2/par['alpha_neuron'])*par['noise_in_sd']
+	par['noise_in']     = par['noise_in_sd']
 
 	### STP
 	if par['use_stp']:
