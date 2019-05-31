@@ -10,9 +10,11 @@ def to_gpu(x):
 			return {k:to_gpu(a) for (k, a) in x.items()}
 		elif type(x) == list:
 			return [to_gpu(a) for a in x]
+		elif type(x) == tuple:
+			return to_gpu(list(x))
 		else:
 			if type(x) == np.ndarray and x.dtype == np.float64:
-				return cp.asarray(x, dtype=cp.float32)
+				return cp.asarray(x.astype(np.float32))
 			else:
 				return cp.asarray(x)
 	else:
