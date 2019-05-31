@@ -397,11 +397,7 @@ def main():
 		info_str1 = 'Full Acc: {:5.3f} | Mean Spiking: {:5.3f} Hz'.format(full_accuracy, mean_spiking)
 		print('Aggregating data...', end='\r')
 
-
-		if i%50==0:
-			pf.activity_plots(i, model)
-
-			if par['plot_EI_testing']:
+		if par['plot_EI_testing']:
 				# Plot I square
 				plt.figure()
 				plt.plot(I_sqr_record)
@@ -423,6 +419,8 @@ def main():
 				plt.clf()
 				plt.close()
 
+		if i%50==0:
+			pf.activity_plots(i, model)
 
 			if i != 0:
 				pf.training_curve(i, iter_record, full_acc_record, task_acc_record)
