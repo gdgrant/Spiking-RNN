@@ -13,6 +13,7 @@ par = {
 	'savefn'                  : 'merge_testing',
 	'save_data_files'         : False,
 	'save_pdfs'               : False,
+	'plot_EI_testing'         : False,
 
 	# Training environment
 	'batch_size'              : 64,

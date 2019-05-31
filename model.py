@@ -14,6 +14,7 @@ from adex import run_adex
 from adex_dynamics import calculate_dynamics
 
 import copy
+import cupy.linalg as LA
 
 class Model:
 
@@ -282,7 +283,7 @@ class Model:
 			#self.EI_balance_delta = cp.matmul(self.con_dict['EI_matrix'], self.EI_balance_delta)
 			self.EI_balance_delta_exh = (const * h * (1 - z))[:,np.newaxis,:] * state_dict['jr']
 			self.EI_balance_delta_inh = I * state_dict['jr']
-			self.EI_exh_limit = 0.001 * cp.sum(self.eff_var['W_rnn'][:par['n_EI'],:], axis=0)
+			self.EI_exh_limit = 0.001 * cp.mean(self.eff_var['W_rnn'][:par['n_EI'],:], axis=0)
 			# print('EI_balance_delta_exh: ', self.EI_balance_delta_exh.shape)
 			# print('EI_balance_delta_inh: ', self.EI_balance_delta_inh.shape)
 			# print('EI_exh_limit: ', self.EI_exh_limit.shape)
@@ -370,7 +371,8 @@ def main():
 	task_acc_record = []
 	iter_record = []
 	I_sqr_record = []
-	W_rnn_grad_record = []
+	W_rnn_grad_sum_record = []
+	W_rnn_grad_norm_record = []
 
 	# Run the training loop
 	for i in range(par['iterations']):
@@ -388,12 +390,34 @@ def main():
 		task_acc_record.append(task_accuracy)
 		iter_record.append(i)
 		I_sqr_record.append(model.I_sqr)
-		W_rnn_grad_record.append(cp.sum(model.grad_dict['W_rnn']))
+		W_rnn_grad_sum_record.append(cp.sum(model.grad_dict['W_rnn']))
+		W_rnn_grad_norm_record.append(LA.norm(model.grad_dict['W_rnn']))
 
 		info_str0 = 'Iter {:>5} | Task Loss: {:5.3f} | Task Acc: {:5.3f} | '.format(i, losses['task'], task_accuracy)
 		info_str1 = 'Full Acc: {:5.3f} | Mean Spiking: {:5.3f} Hz'.format(full_accuracy, mean_spiking)
 		print('Aggregating data...', end='\r')
 
+		if par['plot_EI_testing']:
+				# Plot I square
+				plt.figure()
+				plt.plot(I_sqr_record)
+				plt.savefig('./savedir/{}_I_sqr_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
+				plt.clf()
+				plt.close()
+
+				# Plot W_rnn sum update
+				plt.figure()
+				plt.plot(W_rnn_grad_sum_record)
+				plt.savefig('./savedir/{}_W_rnn_grad_sum_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
+				plt.clf()
+				plt.close()
+
+				# Plot W_rnn norm update
+				plt.figure()
+				plt.plot(W_rnn_grad_norm_record)
+				plt.savefig('./savedir/{}_W_rnn_grad_norm_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
+				plt.clf()
+				plt.close()
 
 		if i%50==0:
 			pf.activity_plots(i, model)
