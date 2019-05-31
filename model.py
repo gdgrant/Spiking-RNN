@@ -164,6 +164,8 @@ class Model:
 		sx = self.con_dict['syn_x_init'] if par['use_stp'] else 1.
 		su = self.con_dict['syn_u_init'] if par['use_stp'] else 1.
 
+		self.I_sqr = 0
+
 		# Make state dictionary
 		state_dict = {'v':v, 'w':w, 'ia':ia, 'ir':ir, 'ja':copy.copy(ia), 'jr':copy.copy(ir), 'sx':sx, 'su':su}
 
@@ -183,6 +185,8 @@ class Model:
 			# Run cell step
 			self.z[t,...], self.y[t,...], self.h[t,...], state_dict, I = \
 				self.recurrent_cell(x, z_L, self.y[t-1,...], state_dict)
+
+			self.I_sqr += (1/par['num_time_steps']) * cp.mean(cp.square(cp.sum(I, axis=1)))
 
 			# Record cell state
 			self.v[t,...]  = state_dict['v']
@@ -268,7 +272,7 @@ class Model:
 		# EI balance
 		if par['balance_EI_training']:
 			h = np.squeeze(h, axis = 1)
-			const = np.squeeze(c['dt']/c['C'], axis = [0,1])
+			const = np.squeeze(c['dt'] * c['mu'] / c['C'], axis = (0,1))
 			# print('h: ', h.shape)
 			# print('z: ', z.shape)
 			# print('const: ', const.shape)
@@ -365,6 +369,8 @@ def main():
 	full_acc_record = []
 	task_acc_record = []
 	iter_record = []
+	I_sqr_record = []
+	W_rnn_grad_record = []
 
 	# Run the training loop
 	for i in range(par['iterations']):
@@ -381,6 +387,8 @@ def main():
 		full_acc_record.append(full_accuracy)
 		task_acc_record.append(task_accuracy)
 		iter_record.append(i)
+		I_sqr_record.append(model.I_sqr)
+		W_rnn_grad_record.append(cp.sum(model.grad_dict['W_rnn']))
 
 		info_str0 = 'Iter {:>5} | Task Loss: {:5.3f} | Task Acc: {:5.3f} | '.format(i, losses['task'], task_accuracy)
 		info_str1 = 'Full Acc: {:5.3f} | Mean Spiking: {:5.3f} Hz'.format(full_accuracy, mean_spiking)
