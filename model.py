@@ -351,9 +351,9 @@ class Model:
 		pf.visualize_delta(i, self.var_dict, self.grad_dict)
 
 
-	def show_output_behavior(self, it, match_info, timings):
+	def show_output_behavior(self, it, trial_info):
 
-		pf.output_behavior(it, match_info, timings, softmax(self.y))
+		pf.output_behavior(it, trial_info, softmax(self.y))
 
 
 def main():
@@ -410,7 +410,7 @@ def main():
 
 			trial_info = stim.make_batch(var_delay=False)
 			model.run_model(trial_info, testing=True)
-			model.show_output_behavior(i, trial_info['match'], trial_info['timings'])
+			model.show_output_behavior(i, trial_info)
 
 		# Print output info (after all saving of data is complete)
 		print(info_str0 + info_str1)
