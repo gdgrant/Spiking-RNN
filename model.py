@@ -1,6 +1,6 @@
 # General imports and utility functions
 from imports import *
-from gpu_utils import to_gpu, to_cpu
+from gpu_utils import *
 from model_utils import *
 
 # Training environment
@@ -14,6 +14,7 @@ from adex import run_adex
 from adex_dynamics import calculate_dynamics
 
 import copy
+import cupy.linalg as LA
 
 class Model:
 
@@ -24,7 +25,7 @@ class Model:
 		self.init_optimizer()
 		self.init_eligibility()
 
-		self.size_ref = cp.ones([par['batch_size'], 1, par['n_hidden']])
+		self.size_ref = cp_ones([par['batch_size'], 1, par['n_hidden']])
 
 
 	def init_constants(self):
@@ -74,14 +75,14 @@ class Model:
 		self.eps['inp'] = {}
 		self.eps['rec'] = {}
 		for s in ['v', 'w', 'ia']:
-			self.eps['inp'][s] = cp.zeros([par['batch_size'], par['n_input'], par['n_hidden']])
+			self.eps['inp'][s] = cp_zeros([par['batch_size'], par['n_input'], par['n_hidden']])
 		for s in ['v', 'w', 'ir', 'sx', 'su']:
-			self.eps['rec'][s] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
+			self.eps['rec'][s] = cp_zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
 
 		self.kappa = {}
-		self.kappa['inp'] = cp.zeros([par['batch_size'], par['n_input'], par['n_hidden']])
-		self.kappa['rec'] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
-		self.kappa['out'] = cp.zeros([par['batch_size'], par['n_hidden'], 1])
+		self.kappa['inp'] = cp_zeros([par['batch_size'], par['n_input'], par['n_hidden']])
+		self.kappa['rec'] = cp_zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
+		self.kappa['out'] = cp_zeros([par['batch_size'], par['n_hidden'], 1])
 
 
 	def zero_state(self):
@@ -142,23 +143,23 @@ class Model:
 		self.zero_state()
 
 		# Establish internal state recording
-		self.v  = cp.zeros([par['num_time_steps'], par['batch_size'], 1, par['n_hidden']])
-		self.w  = cp.zeros([par['num_time_steps'], par['batch_size'], 1, par['n_hidden']])
-		self.sx = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], 1])
-		self.su = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], 1])
+		self.v  = cp_zeros([par['num_time_steps'], par['batch_size'], 1, par['n_hidden']])
+		self.w  = cp_zeros([par['num_time_steps'], par['batch_size'], 1, par['n_hidden']])
+		self.sx = cp_zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], 1])
+		self.su = cp_zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], 1])
 
 		# Record other parts of the model as well
-		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
-		self.h = cp.zeros([par['num_time_steps'], par['batch_size'], 1, par['n_hidden']])
-		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
+		self.z = cp_zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
+		self.h = cp_zeros([par['num_time_steps'], par['batch_size'], 1, par['n_hidden']])
+		self.y = cp_zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
 
 		# Initialize cell states
 		v = self.con_dict['adex']['V_r'] * self.size_ref
 		w = self.con_dict['w_init'] * self.size_ref
 
 		# Initialize input trace
-		ia = cp.zeros([par['batch_size'], par['n_input'], par['n_hidden']])
-		ir = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
+		ia = cp_zeros([par['batch_size'], par['n_input'], par['n_hidden']])
+		ir = cp_zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
 
 		# Initialize synaptic plasticity
 		sx = self.con_dict['syn_x_init'] if par['use_stp'] else 1.
@@ -283,7 +284,7 @@ class Model:
 			#self.EI_balance_delta = cp.matmul(self.con_dict['EI_matrix'], self.EI_balance_delta)
 			self.EI_balance_delta_exh = (const * h * (1 - z))[:,np.newaxis,:] * state_dict['jr']
 			self.EI_balance_delta_inh = I * state_dict['jr']
-			self.EI_exh_limit = 0.001 * cp.sum(self.eff_var['W_rnn'][:par['n_EI'],:], axis=0)
+			self.EI_exh_limit = 0.001 * cp.mean(self.eff_var['W_rnn'][:par['n_EI'],:], axis=0)
 			# print('EI_balance_delta_exh: ', self.EI_balance_delta_exh.shape)
 			# print('EI_balance_delta_inh: ', self.EI_balance_delta_inh.shape)
 			# print('EI_exh_limit: ', self.EI_exh_limit.shape)
@@ -371,7 +372,8 @@ def main():
 	task_acc_record = []
 	iter_record = []
 	I_sqr_record = []
-	W_rnn_grad_record = []
+	W_rnn_grad_sum_record = []
+	W_rnn_grad_norm_record = []
 
 	# Run the training loop
 	for i in range(par['iterations']):
@@ -389,12 +391,34 @@ def main():
 		task_acc_record.append(task_accuracy)
 		iter_record.append(i)
 		I_sqr_record.append(model.I_sqr)
-		W_rnn_grad_record.append(cp.sum(model.grad_dict['W_rnn']))
+		W_rnn_grad_sum_record.append(cp.sum(model.grad_dict['W_rnn']))
+		W_rnn_grad_norm_record.append(LA.norm(model.grad_dict['W_rnn']))
 
 		info_str0 = 'Iter {:>5} | Task Loss: {:5.3f} | Task Acc: {:5.3f} | '.format(i, losses['task'], task_accuracy)
 		info_str1 = 'Full Acc: {:5.3f} | Mean Spiking: {:5.3f} Hz'.format(full_accuracy, mean_spiking)
 		print('Aggregating data...', end='\r')
 
+		if par['plot_EI_testing']:
+				# Plot I square
+				plt.figure()
+				plt.plot(I_sqr_record)
+				plt.savefig('./savedir/{}_I_sqr_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
+				plt.clf()
+				plt.close()
+
+				# Plot W_rnn sum update
+				plt.figure()
+				plt.plot(W_rnn_grad_sum_record)
+				plt.savefig('./savedir/{}_W_rnn_grad_sum_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
+				plt.clf()
+				plt.close()
+
+				# Plot W_rnn norm update
+				plt.figure()
+				plt.plot(W_rnn_grad_norm_record)
+				plt.savefig('./savedir/{}_W_rnn_grad_norm_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
+				plt.clf()
+				plt.close()
 
 		if i%50==0:
 			pf.activity_plots(i, model)
