@@ -11,7 +11,7 @@ def to_gpu(x):
 		elif type(x) == list:
 			return [to_gpu(a) for a in x]
 		else:
-			if x.dtype == np.float64:
+			if type(x) == np.ndarray and x.dtype == np.float64:
 				return cp.asarray(x, dtype=cp.float32)
 			else:
 				return cp.asarray(x)
