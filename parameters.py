@@ -38,7 +38,7 @@ par = {
 	# Network shape
 	'num_motion_tuned'        : 96,
 	'num_fix_tuned'           : 8,
-	'num_rule_tuned'          : 0,
+	'num_rule_tuned'          : 16,
 	'num_receptive_fields'    : 1,
 	'n_hidden'                : 500,
 	'n_output'                : 3,
@@ -71,7 +71,7 @@ par = {
 	'rnn_gamma'               : 0.8,
 	'output_gamma'            : 0.04,
 	'rnn_cap'                 : 0.006,
-	'noise_in_sd'             : 0.5,
+	'noise_in_sd'             : 0.75,
 
 	# Task setup
 	'task'                    : 'dmc',
@@ -79,7 +79,7 @@ par = {
 	'kappa'                   : 2.,
 	'tuning_height'           : 100.,
 	'response_multiplier'     : 2.,
-	'num_rules'               : 1,
+	'num_rules'               : 2,
 	'fixation_on'             : True,
 
 	# Task variable parameters
@@ -87,12 +87,12 @@ par = {
 	'catch_prob'              : 0.1,
 
 	# Task timings
-	'dead_time'               : 20,
+	'dead_time'               : 50,
 	'fix_time'                : 30,
 	'sample_time'             : 150,
 	'delay_time'              : 120,
 	'test_time'               : 150,
-	'mask_time'               : 20,
+	'mask_time'               : 50,
 
 }
 
@@ -140,9 +140,9 @@ def make_weights_and_masks():
 		z = beta/np.exp(kappa)
 		for i in range(0, par['n_hidden'], 4):
 			if i < par['n_EI']:
-				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.18*par['n_hidden']/par['n_input']))))
+				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.22*par['n_hidden']/par['n_input']))))
 			else:
-				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.62*par['n_hidden']/par['n_input']))))
+				y = z * np.exp(kappa*np.cos(np.radians(U - i*(0.82*par['n_hidden']/par['n_input']))))
 			par['W_in_const'][:,i:i+2] = y[:,np.newaxis]
 	
 		par['W_in_init'] = par['W_in_const']

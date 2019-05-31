@@ -209,13 +209,6 @@ class Model:
 		""" Compute one iteration of the recurrent network, progressing the
 			internal state by one time step. """
 
-		# Sum the input currents into shape [batch x postsynaptic]
-		I = cp.sum(st['ia'], axis=1, keepdims=True) + cp.sum(st['ir'], axis=1, keepdims=True)
-
-		# Update the AdEx cell state with the input current
-		st['v'], st['w'], z_j = run_adex(st['v'], st['w'], I, self.con_dict['adex'])
-
-		# Update the input traces based on presynaptic spikes
 		st['ia'] = self.con_dict['adex']['beta'] * st['ia'] + \
 			(1-self.con_dict['adex']['beta']) * self.eff_var['W_in'] * x
 		st['ir'] = self.con_dict['adex']['beta'] * st['ir'] + \
@@ -229,6 +222,20 @@ class Model:
 		# Update the synaptic plasticity state (recurrent only; input is static)
 		st['sx'], st['su'] = \
 			synaptic_plasticity(st['sx'], st['su'], z_i[:,:,cp.newaxis], self.con_dict, par['use_stp'])
+
+
+		# Sum the input currents into shape [batch x postsynaptic]
+		I = cp.sum(st['ia'], axis=1, keepdims=True) + cp.sum(st['ir'], axis=1, keepdims=True)
+
+		# Update the AdEx cell state with the input current
+		st['v'], st['w'], z_j = run_adex(st['v'], st['w'], I, self.con_dict['adex'])
+
+		# Update the input traces based on presynaptic spikes
+
+
+
+
+
 
 		# Update output trace based on postsynaptic cell state (Eq. 12)
 		y = self.con_dict['adex']['kappa'] * y + z_j @ self.eff_var['W_out'] + self.eff_var['b_out']

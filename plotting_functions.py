@@ -2,47 +2,73 @@ from imports import *
 from gpu_utils import to_gpu, to_cpu
 from parameters import par
 
-def output_behavior(it, match_info, timings, y):
+def output_behavior(it, trial_info, y):
 
-	match = np.where(match_info)[0]
-	nonmatch = np.where(np.logical_not(match_info))[0]
-	time = np.arange(par['num_time_steps'])
 
-	y_match        = to_cpu(cp.mean(y[:,match,:], axis=1))
-	y_nonmatch     = to_cpu(cp.mean(y[:,nonmatch,:], axis=1))
+	if par['task'] == 'dmswitch':
+		task_info = trial_info['task']
+		task_names = ['dms', 'dmc']
+		num_tasks = 2
+		height = 14
+	else:
+		task_names = [par['task']]
+		num_tasks = 1
+		height = 8
 
-	y_match_err    = to_cpu(cp.std(y[:,match,:], axis=1))
-	y_nonmatch_err = to_cpu(cp.std(y[:,nonmatch,:], axis=1))
+	match_info, timings = trial_info['match'], trial_info['timings']
 
-	c_res = [[60/255, 21/255, 59/255, 1.0], [164/255, 14/255, 76/255, 1.0], [77/255, 126/255, 168/255, 1.0]]
-	c_err = [[60/255, 21/255, 59/255, 0.5], [164/255, 14/255, 76/255, 0.5], [77/255, 126/255, 168/255, 0.5]]
+	fig, ax = plt.subplots(2*num_tasks, 1, figsize=[16,height], sharex=True)
 
-	fig, ax = plt.subplots(2,1, figsize=[16,8], sharex=True)
-	for i, (r, e) in enumerate(zip([y_match, y_nonmatch], [y_match_err, y_nonmatch_err])):
-		err_low  = r - e
-		err_high = r + e
+	for task in range(num_tasks):
 
-		ax[i].fill_between(time, err_low[:,0], err_high[:,0], color=c_err[0])
-		ax[i].fill_between(time, err_low[:,1], err_high[:,1], color=c_err[1])
-		ax[i].fill_between(time, err_low[:,2], err_high[:,2], color=c_err[2])
+		if par['task'] == 'dmswitch':
+			task_mask = (task_info == task)
+			match = np.where(np.logical_and(task_mask, match_info))[0]
+			nonmatch = np.where(np.logical_and(task_mask, np.logical_not(match_info)))[0]
 
-		ax[i].plot(time, r[:,0], c=c_res[0], label='Fixation')
-		ax[i].plot(time, r[:,1], c=c_res[1], label='Cat. 1 / Match')
-		ax[i].plot(time, r[:,2], c=c_res[2], label='Cat. 2 / Non-Match')
+		else:
+			match = np.where(match_info)[0]
+			nonmatch = np.where(np.logical_not(match_info))[0]
 
-		ax[i].legend(loc="upper left")
+		time = np.arange(par['num_time_steps'])
 
-		ax[i].axvline(timings[0,:].min(), c='k', ls='--')
-		ax[i].axvline(timings[1,:].max(), c='k', ls='--')
+		y_match        = to_cpu(cp.mean(y[:,match,:], axis=1))
+		y_nonmatch     = to_cpu(cp.mean(y[:,nonmatch,:], axis=1))
+
+		y_match_err    = to_cpu(cp.std(y[:,match,:], axis=1))
+		y_nonmatch_err = to_cpu(cp.std(y[:,nonmatch,:], axis=1))
+
+		c_res = [[60/255, 21/255, 59/255, 1.0], [164/255, 14/255, 76/255, 1.0], [77/255, 126/255, 168/255, 1.0]]
+		c_err = [[60/255, 21/255, 59/255, 0.5], [164/255, 14/255, 76/255, 0.5], [77/255, 126/255, 168/255, 0.5]]
+
+		for i, (r, e) in enumerate(zip([y_match, y_nonmatch], [y_match_err, y_nonmatch_err])):
+			j = 2*task + i
+
+			err_low  = r - e
+			err_high = r + e
+
+			ax[j].fill_between(time, err_low[:,0], err_high[:,0], color=c_err[0])
+			ax[j].fill_between(time, err_low[:,1], err_high[:,1], color=c_err[1])
+			ax[j].fill_between(time, err_low[:,2], err_high[:,2], color=c_err[2])
+
+			ax[j].plot(time, r[:,0], c=c_res[0], label='Fixation')
+			ax[j].plot(time, r[:,1], c=c_res[1], label='Cat. 1 / Match')
+			ax[j].plot(time, r[:,2], c=c_res[2], label='Cat. 2 / Non-Match')
+
+			for t in range(timings.shape[0]):
+				ax[j].axvline(timings[t,:].min(), c='k', ls='--')
 
 	fig.suptitle('Output Neuron Behavior')
-	ax[0].set_title('Cat. 1 / Match Trials')
-	ax[1].set_title('Cat. 2 / Non-Match Trials')
+	for task in range(num_tasks):
+		j = task*2
+		ax[j].set_title('Task: {} | Cat. 1 / Match Trials'.format(task_names[task].upper()))
+		ax[j+1].set_title('Task: {} | Cat. 2 / Non-Match Trials'.format(task_names[task].upper()))
 
-	ax[0].set_ylabel('Mean Response')
-	ax[1].set_ylabel('Mean Response')
-	ax[1].set_xlim(time.min(), time.max())
-	ax[1].set_xlabel('Time')
+	for j in range(2*num_tasks):
+		ax[j].legend(loc="upper left")
+		ax[j].set_ylabel('Mean Response')
+	ax[0].set_xlim(time.min(), time.max())
+	ax[2*num_tasks-1].set_xlabel('Time')
 
 	plt.savefig('./savedir/{}_outputs_iter{:0>6}.png'.format(par['savefn'], it), bbox_inches='tight')
 	if par['save_pdfs']:
