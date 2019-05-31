@@ -177,8 +177,8 @@ class Model:
 
 			# Get recurrent spikes from par['latency'] time steps ago
 			neuron_inds = np.arange(par['n_hidden']).astype(np.int64)
-			z_L  = self.z[t-(1+par['latency_inds']),:,neuron_inds].T
-			z_2L = self.z[t-(1+2*par['latency_inds']),:,neuron_inds].T
+			z_L  = self.z[t-par['latency_inds'],:,neuron_inds].T
+			z_2L = self.z[t-2*par['latency_inds'],:,neuron_inds].T
 
 			# print(self.z[t].shape, z_L.shape)
 
@@ -195,9 +195,9 @@ class Model:
 			self.su[t,...] = state_dict['su']
 
 			# Calculate latency h and latency syn_x
-			h_L  = self.h[t-(1+par['latency_inds']),:,:,neuron_inds].transpose(1,2,0)
-			sx_L = self.sx[t-(1+par['latency_inds']),:,neuron_inds,:].transpose(1,0,2)
-			su_L = self.su[t-(1+par['latency_inds']),:,neuron_inds,:].transpose(1,0,2)
+			h_L  = self.h[t-par['latency_inds'],:,:,neuron_inds].transpose(1,2,0)
+			sx_L = self.sx[t-par['latency_inds'],:,neuron_inds,:].transpose(1,0,2)
+			su_L = self.su[t-par['latency_inds'],:,neuron_inds,:].transpose(1,0,2)
 
 			# Only run updates if training
 			if not testing:
@@ -213,6 +213,7 @@ class Model:
 		""" Compute one iteration of the recurrent network, progressing the
 			internal state by one time step. """
 
+
 		st['ia'] = self.con_dict['adex']['beta'] * st['ia'] + \
 			(1-self.con_dict['adex']['beta']) * self.eff_var['W_in'] * x
 		st['ir'] = self.con_dict['adex']['beta'] * st['ir'] + \
@@ -227,7 +228,6 @@ class Model:
 		st['sx'], st['su'] = \
 			synaptic_plasticity(st['sx'], st['su'], z_i[:,:,cp.newaxis], self.con_dict, par['use_stp'])
 
-
 		# Sum the input currents into shape [batch x postsynaptic]
 		I = cp.sum(st['ia'], axis=1, keepdims=True) + cp.sum(st['ir'], axis=1, keepdims=True)
 
@@ -235,6 +235,7 @@ class Model:
 		st['v'], st['w'], z_j = run_adex(st['v'], st['w'], I, self.con_dict['adex'])
 
 		# Update the input traces based on presynaptic spikes
+
 
 
 
@@ -255,7 +256,7 @@ class Model:
 
 		# Calculate the model dynamics and generate new epsilons
 		self.eps = calculate_dynamics(self.eps, state_dict, x, z, z_prev, \
-			z_prev_prev, syn_x_prev, syn_u_prev, h, h_prev, self.con_dict, self.eff_var)
+			z_prev_prev, syn_x_prev, syn_u_prev, h, h_prev, self.con_dict, self.eff_var, self.var_dict)
 
 		# Update and modulate e's
 		e_inp = h * self.eps['inp']['v']

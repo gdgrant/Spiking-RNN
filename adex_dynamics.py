@@ -1,7 +1,7 @@
 from imports import *
 from parameters import par
 
-def calculate_dynamics(prev_eps, st, x, z, z_prev, z_prev_prev, syn_x_prev, syn_u_prev, h, h_prev, con_dict, eff_var):
+def calculate_dynamics(prev_eps, st, x, z, z_prev, z_prev_prev, syn_x_prev, syn_u_prev, h, h_prev, con_dict, eff_var, var_dict):
 	""" Calculate the dynamics of the model
 		prev_eps = the epsilons of the previous time step
 		st       = dict holding all elements of model state
@@ -38,6 +38,8 @@ def calculate_dynamics(prev_eps, st, x, z, z_prev, z_prev_prev, syn_x_prev, syn_
 	dt_over_tau    = c['dt']/c['tau']
 	dt_a_over_tau  = dt_over_tau*c['a']
 	one_minus_beta = 1 - c['beta']
+
+	d_eff_weights_raw_weights = ((var_dict['W_rnn'] >= 0) * con_dict['EI_vector'][:,cp.newaxis])[cp.newaxis,...]
 
 	one_minus_z           = 1. - z
 	one_minus_z_dt_over_C = one_minus_z * dt_over_C
@@ -91,8 +93,7 @@ def calculate_dynamics(prev_eps, st, x, z, z_prev, z_prev_prev, syn_x_prev, syn_
 		  prev_eps['rec']['ir'] * c['beta'] \
 		+ prev_eps['rec']['sx'] * one_minus_beta * eff_var['W_rnn'][cp.newaxis,:,:] * syn_u * z_prev \
 		+ prev_eps['rec']['su'] * one_minus_beta * eff_var['W_rnn'][cp.newaxis,:,:] * syn_x * z_prev \
-		+ one_minus_beta * syn_u * syn_x * z_prev * con_dict['EI_vector'][cp.newaxis,:,cp.newaxis]
-		# ^^^ Last term requires EI -- think impact of spike on current, and of EI as a constant on W_rnn
+		+ one_minus_beta * syn_u * syn_x * z_prev * d_eff_weights_raw_weights
 
 	eps['rec']['sx'] = \
 		  prev_eps['rec']['sx'] * (1 - con_dict['alpha_std'] - syn_u*z_prev) \
@@ -103,7 +104,7 @@ def calculate_dynamics(prev_eps, st, x, z, z_prev, z_prev_prev, syn_x_prev, syn_
 
 
 	### Second-order corrections to recurrent epsilons
-	term1 = one_minus_beta * h_prev * one_minus_z_dt_mu_over_C * syn_x_prev * syn_u_prev * z_prev_prev * con_dict['EI_vector'][cp.newaxis,:,cp.newaxis]
+	term1 = one_minus_beta * h_prev * one_minus_z_dt_mu_over_C * syn_x_prev * syn_u_prev * z_prev_prev * d_eff_weights_raw_weights
 	term2 = one_minus_beta * syn_u  * syn_x * eff_var['W_rnn'][cp.newaxis,:,:]
 	eps['rec']['ir'] += cp.einsum('bij,bjk->bik', term1, term2)
 
