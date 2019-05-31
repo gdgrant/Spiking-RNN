@@ -381,7 +381,7 @@ def main():
 		task_acc_record.append(task_accuracy)
 		iter_record.append(i)
 		I_sqr_record.append(model.I_sqr)
-		W_rnn_grad_record.append(model.grad_dict['W_rnn'])
+		W_rnn_grad_record.append(cp.sum(model.grad_dict['W_rnn']))
 
 		info_str0 = 'Iter {:>5} | Task Loss: {:5.3f} | Task Acc: {:5.3f} | '.format(i, losses['task'], task_accuracy)
 		info_str1 = 'Full Acc: {:5.3f} | Mean Spiking: {:5.3f} Hz'.format(full_accuracy, mean_spiking)
