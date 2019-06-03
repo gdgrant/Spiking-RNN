@@ -45,3 +45,17 @@ def synaptic_plasticity(syn_x, syn_u, z, c, use_stp):
 		syn_u = cp.clip(syn_u, 0., 1.)
 
 	return syn_x, syn_u
+
+
+### Run environment utilities
+
+def save_code():
+	fns = [fn for fn in os.listdir('./') \
+		if '.py' in fn and not '.pyc' in fn]
+
+	file_dict = {}
+	for fn in fns:
+		with open('./'+fn, 'r') as f:
+			file_dict[fn] = f.read()
+
+	return file_dict

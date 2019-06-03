@@ -423,7 +423,7 @@ def main():
 				model.visualize_delta(i)
 
 				if par['save_data_files']:
-					data = {'par' : par, 'weights' : to_cpu(model.var_dict)}
+					data = {'par' : par, 'weights': to_cpu(model.var_dict), 'code':save_code()}
 					pickle.dump(data, open('./savedir/{}_data_iter{:0>6}.pkl'.format(par['savefn'], i), 'wb'))
 
 			trial_info = stim.make_batch(var_delay=False)
@@ -434,8 +434,8 @@ def main():
 		print(info_str0 + info_str1)
 
 		if i%100 == 0:
-			if np.mean(task_acc_record[-100:]) > 0.9:
-				print('\nMean accuracy greater than 0.9 over last 100 iters.\nMoving on to next model.\n')
+			if np.mean(task_acc_record[-100:]) > 0.95:
+				print('\nMean accuracy greater than 0.95 over last 100 iters.\nMoving on to next model.\n')
 				break
 
 
