@@ -75,7 +75,6 @@ def calculate_dynamics(prev_eps, st, x, x_prev, z, z_prev, z_prev_prev, syn_x_pr
 		+ one_minus_beta * x
 
 	### Update recurrent epsilons
-
 	eps['rec']['v'] = \
 		  prev_eps['rec']['v']  * adex_voltage_dvdv \
 		- prev_eps['rec']['w']  * one_minus_z_dt_over_C \
@@ -96,7 +95,15 @@ def calculate_dynamics(prev_eps, st, x, x_prev, z, z_prev, z_prev_prev, syn_x_pr
 		- prev_eps['rec']['su'] * syn_x * z_prev
 
 	eps['rec']['su'] = \
-		  prev_eps['rec']['su'] * (1 - con_dict['alpha_stf'] - con_dict['U']*z_prev) 
+		  prev_eps['rec']['su'] * (1 - con_dict['alpha_stf'] - con_dict['U']*z_prev)
+
+	### Second-order terms
+	if False:
+		# Needs v_prev to work!
+		eps['rec']['v'] += \
+			  prev_eps['rec']['v_prev'] * h_prev \
+			* ((1 + one_minus_beta * eff_var['W_rnn'][cp.newaxis,:,:]) * syn_x * syn_u + con_dict['U'] * (1 - syn_u))
+
 
 	### Second-order corrections to recurrent epsilons
 	"""
