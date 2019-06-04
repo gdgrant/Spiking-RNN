@@ -25,7 +25,7 @@ par = {
 	# Optimization parameters
 	'gamma_psd'               : 0.3,
 	'L_spike_cost'            : 10.,
-	'train_input_weights'     : True,
+	'train_input_weights'     : False,
 	'pseudo_th'               : 10e-3,
 	'dv_approx'               : True,
 
@@ -46,9 +46,9 @@ par = {
 
 	# Timing constants (all in ms)
 	'dt'                      : 1,
-	'tau_hid'                 : 20,
+	'tau_hid'                 : 10,
 	'tau_out'                 : 20,
-	'latency'                 : [10,11],	# No latency = None
+	'latency'                 : 10,
 
 	# AdEx architecture
 	'exc_model'               : 'RS',
@@ -68,17 +68,17 @@ par = {
 	'betagrad'				  : 0,
 
 	# Noise and weight scaling
-	'input_gamma'             : 0.12,
-	'rnn_gamma'               : 0.08,
+	'input_gamma'             : 0.06,
+	'rnn_gamma'               : 0.06,
 	'output_gamma'            : 0.04,
 	'rnn_cap'                 : 0.006,
 	'noise_in_sd'             : 4.,
 
 	# Task setup
 	'task'                    : 'dmc',
-	'num_motion_dirs'         : 8,
+	'num_motion_dirs'         : 4,
 	'kappa'                   : 2.,
-	'tuning_height'           : 40.,
+	'tuning_height'           : 100.,# was 20
 	'response_multiplier'     : 2.,
 	'num_rules'               : 2,
 	'fixation_on'             : True,
@@ -102,41 +102,40 @@ def make_weights_and_masks():
 
 	# Make W_in and mask
 	par['W_in_init'] = np.random.gamma(par['input_gamma'], \
-		scale=1., size=[par['n_input'], par['n_hidden']]).astype(np.float32)
-	par['W_in_mask'] = np.zeros_like(par['W_in_init'])
-	par['W_in_mask'][:,0:par['n_EI']:4] = 1.
-	par['W_in_init'] *= par['W_in_mask']
+		scale=1., size=[par['n_input'], par['n_hidden']]).astype(np.float64)
+	par['W_in_mask'] = np.ones_like(par['W_in_init'])
+	#par['W_in_mask'][:,0:par['n_hidden']:4] = 1.
+	#par['W_in_init'] *= par['W_in_mask']
 
 	# Make W_out and mask
-	par['W_out_init'] = np.random.uniform(-1., 1., size=[par['n_hidden'], par['n_output']]).astype(np.float32)
+	par['W_out_init'] = np.random.uniform(-1., 1., size=[par['n_hidden'], par['n_output']]).astype(np.float64)
 	par['W_out_mask'] = np.ones_like(par['W_out_init'])
 
 	# Make b_out and mask
-	par['b_out_init'] = np.zeros([1, par['n_output']], dtype=np.float32)
+	par['b_out_init'] = np.zeros([1, par['n_output']], dtype=np.float64)
 	par['b_out_mask'] = np.ones_like(par['b_out_init'])
 
 	# Make W_rnn and mask
 	if par['EI_prop'] == 1.:
-		par['W_rnn_init'] = np.random.uniform(-par['rnn_gamma'], par['rnn_gamma'], size=[par['n_hidden'],par['n_hidden']]).astype(np.float32)
+		par['W_rnn_init'] = np.random.uniform(-par['rnn_gamma'], par['rnn_gamma'], size=[par['n_hidden'],par['n_hidden']]).astype(np.float64)
 	else:
-		par['W_rnn_init'] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=[par['n_hidden'], par['n_hidden']]).astype(np.float32)
+		par['W_rnn_init'] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=[par['n_hidden'], par['n_hidden']]).astype(np.float64)
 		if par['balance_EI']:
 			par['W_rnn_init'][par['n_EI']:,:] *= 1.8
 			par['W_rnn_init'][:,par['n_EI']:] *= 1.8
 
-	par['W_rnn_mask']   = 1 - np.eye(par['n_hidden']).astype(np.float32)
+	par['W_rnn_mask']   = 1 - np.eye(par['n_hidden']).astype(np.float64)
 	par['W_rnn_init']  *= par['W_rnn_mask']
 
-	par['W_rnn_init'] = np.minimum(2., par['W_rnn_init']).astype(np.float32)
+	par['W_rnn_init'] = np.minimum(2., par['W_rnn_init']).astype(np.float64)
 
 	# Remake W_in and mask if weight won't be trained
 	if not par['train_input_weights']:
 
-		par['W_in_const'] = np.zeros_like(par['W_in_init'], dtype=np.float32)
-		U = np.linspace(0, 360, par['n_input']).astype(np.float32)
-
-		beta = 0.1
-		kappa = 1.
+		par['W_in_const'] = np.zeros_like(par['W_in_init'], dtype=np.float64)
+		U = np.linspace(0, 360, par['n_input']).astype(np.float64)
+		beta = 0.5
+		kappa = 7.
 		z = beta/np.exp(kappa)
 		for i in range(0, par['n_hidden'], 4):
 			if i < par['n_EI']:
@@ -178,30 +177,20 @@ def update_dependencies():
 	par['n_EI'] = int(par['n_hidden']*par['EI_prop'])
 
 	# Generate EI vector and matrix
-	par['EI_vector'] = np.ones(par['n_hidden'], dtype=np.float32)
+	par['EI_vector'] = np.ones(par['n_hidden'], dtype=np.float64)
 	par['EI_vector'][par['n_EI']:] *= -1
-	par['EI_matrix'] = np.diag(par['EI_vector']).astype(np.float32)
+	par['EI_matrix'] = np.diag(par['EI_vector']).astype(np.float64)
 
-	par['exh_vector'] = np.ones(par['n_hidden'], dtype=np.float32)
+	par['exh_vector'] = np.ones(par['n_hidden'], dtype=np.float64)
 	par['exh_vector'][par['n_EI']:] *= 0
-	par['EI_mask_exh'] = np.diag(par['exh_vector']).astype(np.float32)
+	par['EI_mask_exh'] = np.diag(par['exh_vector']).astype(np.float64)
 
-	par['inh_vector'] = np.ones(par['n_hidden'], dtype=np.float32)
+	par['inh_vector'] = np.ones(par['n_hidden'], dtype=np.float64)
 	par['inh_vector'][:par['n_EI']] *= 0
-	par['EI_mask_inh'] = np.diag(par['inh_vector']).astype(np.float32)
+	par['EI_mask_inh'] = np.diag(par['inh_vector']).astype(np.float64)
 
 	# Initialize weights and generate the associated masks
 	make_weights_and_masks()
-
-	# Generate latency indices
-	if par['latency'] is None:
-		par['latency_inds'] = 0
-	else:
-		latency_dt = [int(p//par['dt']) for p in par['latency']]
-		if latency_dt[0] == latency_dt[1]:
-			latency_dt[1] += 1
-
-		par['latency_inds'] = np.random.randint(*latency_dt, size=par['n_hidden'])
 
 	# Generate time constants and noise values
 	par['dt_sec']       = par['dt']/1000
@@ -212,12 +201,12 @@ def update_dependencies():
 	### STP
 	if par['use_stp']:
 
-		par['alpha_stf'] = np.ones([1,par['n_hidden'],1], dtype=np.float32)
-		par['alpha_std'] = np.ones([1,par['n_hidden'],1], dtype=np.float32)
-		par['U']         = np.ones([1,par['n_hidden'],1], dtype=np.float32)
+		par['alpha_stf'] = np.ones([1,par['n_hidden'],1], dtype=np.float64)
+		par['alpha_std'] = np.ones([1,par['n_hidden'],1], dtype=np.float64)
+		par['U']         = np.ones([1,par['n_hidden'],1], dtype=np.float64)
 
-		par['syn_x_init'] = np.zeros([par['batch_size'],par['n_hidden'],1], dtype=np.float32)
-		par['syn_u_init'] = np.zeros([par['batch_size'],par['n_hidden'],1], dtype=np.float32)
+		par['syn_x_init'] = np.zeros([par['batch_size'],par['n_hidden'],1], dtype=np.float64)
+		par['syn_u_init'] = np.zeros([par['batch_size'],par['n_hidden'],1], dtype=np.float64)
 
 		for i in range(0,par['n_hidden'],2):
 			par['alpha_stf'][:,i,:] = par['dt']/par['tau_slow']
@@ -252,7 +241,7 @@ def update_dependencies():
 
 		for (k0, v_exc), (k1, v_inh) in zip(par[par['exc_model']].items(), par[par['inh_model']].items()):
 			assert(k0 == k1)
-			par_matrix = np.ones([1,1,par['n_hidden']], dtype=np.float32)
+			par_matrix = np.ones([1,1,par['n_hidden']], dtype=np.float64)
 			par_matrix[:,:,:par['n_EI']] *= v_exc
 			par_matrix[:,:,par['n_EI']:] *= v_inh
 			par['adex'][k0] = par_matrix
@@ -262,8 +251,8 @@ def update_dependencies():
 		par['adex']['dt']  = par['dt']/1000
 		par['w_init']      = par['adex']['b']
 
-		par['adex']['beta']  = np.exp(-par['dt']/par['tau_hid']).astype(np.float32)
-		par['adex']['kappa'] = np.exp(-par['dt']/par['tau_out']).astype(np.float32)
+		par['adex']['beta']  = np.exp(-par['dt']/par['tau_hid']).astype(np.float64)
+		par['adex']['kappa'] = np.exp(-par['dt']/par['tau_out']).astype(np.float64)
 		par['adex']['mu']    = par['current_multiplier']
 
 
@@ -276,16 +265,18 @@ def update_dependencies():
 			'v_th'      : 0.61,
 			'beta'      : 1.8
 		}
-		par['lif']['alpha'] = np.exp(-par['dt_sec']/par['lif']['tau_m']).astype(np.float32)
-		par['lif']['rho']   = np.exp(-par['dt_sec']/par['lif']['tau_a']).astype(np.float32)
-		par['lif']['kappa'] = np.exp(-par['dt_sec']/par['lif']['tau_o']).astype(np.float32)
+		par['lif']['alpha'] = np.exp(-par['dt_sec']/par['lif']['tau_m']).astype(np.float64)
+		par['lif']['rho']   = np.exp(-par['dt_sec']/par['lif']['tau_a']).astype(np.float64)
+		par['lif']['kappa'] = np.exp(-par['dt_sec']/par['lif']['tau_o']).astype(np.float64)
 
 
 def check_for_float64():
-
+	pass
+	"""
 	for key, val in par.items():
 		if type(val) == np.ndarray and val.dtype == np.float64:
-			raise Exception('Parameter \'{}\' is of dtype float64.  Use float32 instead.'.format(val))
+			raise Exception('Parameter \'{}\' is of dtype float64.  Use float64 instead.'.format(val))
+	"""
 
 update_dependencies()
 check_for_float64()
