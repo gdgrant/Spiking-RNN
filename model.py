@@ -9,12 +9,12 @@ from stimulus import Stimulus
 from optimizers import Standard, AdamOpt
 import plotting_functions as pf
 
+import copy
+import cupy.linalg as LA
+
 # Network/cell model functions
 from adex import run_adex
 from adex_dynamics import calculate_dynamics
-
-import copy
-import cupy.linalg as LA
 
 
 class Model:
@@ -32,7 +32,7 @@ class Model:
 	def init_constants(self):
 		""" Import constants from CPU to GPU """
 
-		constants  = ['dt', 'dt_sec', 'adex', 'lif', 'w_init']
+		constants  = ['dt', 'dt_sec', 'adex', 'lif', 'izhi', 'w_init']
 		constants += ['EI_vector', 'EI_matrix', 'EI_mask_exh', 'EI_mask_inh']
 		constants += ['W_in_mask', 'W_rnn_mask', 'W_out_mask', 'b_out_mask']
 

@@ -19,7 +19,7 @@ par = {
 	'batch_size'              : 64,
 	'iterations'              : 20000,
 	'learning_rate'           : 1e-3,
-	'cell_type'               : 'adex',
+	'spike_model'             : 'adex',
 	'optimizer'               : 'adam',
 
 	# Optimization parameters
@@ -225,7 +225,7 @@ def update_dependencies():
 	par['adex'] = {}
 	par['lif'] = {}
 
-	if par['cell_type'] == 'adex':
+	if par['spike_model'] == 'adex':
 		### Adaptive-Expoential spiking
 		# Note that voltages are in units of V, A, and secs
 		par['cNA'] = {
@@ -255,8 +255,38 @@ def update_dependencies():
 		par['adex']['kappa'] = np.exp(-par['dt']/par['tau_out']).astype(np.float64)
 		par['adex']['mu']    = par['current_multiplier']
 
+	elif par['spike_model'] == 'izhi':
+		### Adaptive-Expoential spiking
+		# Note that voltages are in units of V, A, and secs
+		par['RS'] = {
+			'a'	: 0.02,
+			'b'	: 0.2,
+			'c'	: -65.,
+			'd'	: 8. }
 
-	elif par['cell_type'] == 'lif':
+		par['FS']  = {
+			'a'	: 0.1,
+			'b'	: 0.2,
+			'c'	: -65.,
+			'd'	: 2. }
+
+		for (k0, v_exc), (k1, v_inh) in zip(par[par['exc_model']].items(), par[par['inh_model']].items()):
+			assert(k0 == k1)
+			par_matrix = np.ones([1,1,par['n_hidden']], dtype=np.float64)
+			par_matrix[:,:,:par['n_EI']] *= v_exc
+			par_matrix[:,:,par['n_EI']:] *= v_inh
+			par['izhi'][k0] = par_matrix
+
+		# par['adex'] = par['RS']
+		par['izhi']['Vth'] = 30.
+		par['izhi']['dt']  = par['dt']/1000
+		par['w_init']      = par['izhi']['b'] * par['izhi']['c']
+
+		par['izhi']['beta']  = np.exp(-par['dt']/par['tau_hid']).astype(np.float64)
+		par['izhi']['kappa'] = np.exp(-par['dt']/par['tau_out']).astype(np.float64)
+
+
+	elif par['spike_model'] == 'lif':
 		### LIF with Adaptive Threshold spiking
 		par['lif'] = {
 			'tau_m'     : 20e-3,
