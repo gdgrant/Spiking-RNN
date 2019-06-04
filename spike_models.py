@@ -1,12 +1,14 @@
 from imports import *
 
 
-def run_spike_model(V, w, I, constants):
+def run_spike_model(V, w, I, spike_model, constants):
 
-	if constants['spike_model'] == 'adex':
-		run_adex(V, w, I, constants)
-	elif constants['spike_model'] == 'izhi':
-		run_izhi(V, w, I, constants)
+	if spike_model == 'adex':
+		V, w, z = run_adex(V, w, I, constants)
+	elif spike_model == 'izhi':
+		V, w, z = run_izhi(V, w, I, constants)
+
+	return V, w, cp.squeeze(z)
 
 
 ### Adaptive-Exponential spiking model
@@ -19,7 +21,7 @@ def run_adex(V, w, I, constants):
 	w_next      = adex_adaptation(V, w, constants)
 	V, w, spike = adex_spike(V_next, w_next, constants)
 
-	return V, w, cp.squeeze(spike)
+	return V, w, spike
 
 
 def adex_membrane(V, w, I, c):
@@ -52,14 +54,14 @@ def adex_spike(V, w, c):
 
 ### Izhikevic Model spiking model
 
-def run_izhi(V, w, I, constants):
+def run_izhi(V, w, I, c):
 	""" Run one step of the AdEx algorithm """
 
 	V_next      = 0.04*V**2 + 5*V + 140 - w + I
 	w_next      = c['a']*(c['b'] * V - w)
-	V, w, spike = izhi_spike(V_next, w_next, constants)
+	V, w, spike = izhi_spike(V_next, w_next, c)
 
-	return V, w, cp.squeeze(spike)
+	return V, w, spike
 
 
 def izhi_spike(V, w, c):

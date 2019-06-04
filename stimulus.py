@@ -21,8 +21,7 @@ class Stimulus:
 		else:
 			raise Exception('Task "{}" not yet implemented.'.format(par['task']))
 
-		if par['cell_type'] != 'rate':
-			trial_info = self.make_spiking(trial_info)
+		trial_info = self.make_spiking(trial_info)
 
 		return trial_info
 

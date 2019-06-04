@@ -26,21 +26,3 @@ def to_cpu(x):
 			return cp.asnumpy(x)
 	else:
 		return x
-
-
-### Precision initializations
-
-def cp_zeros(shape):
-	return cp.zeros(shape, dtype=cp.float32)
-
-
-def np_zeros(shape):
-	return np.zeros(shape, dtype=np.float32)
-
-
-def cp_ones(shape):
-	return cp.ones(shape, dtype=cp.float32)
-
-
-def np_ones(shape):
-	return np.ones(shape, dtype=np.float32)

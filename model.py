@@ -13,8 +13,9 @@ import copy
 import cupy.linalg as LA
 
 # Network/cell model functions
-from adex import run_adex
-from adex_dynamics import calculate_dynamics
+from spike_models import run_spike_model
+from dynamics_adex import calculate_dynamics as adex_dynamics
+from dynamics_izhi import calculate_dynamics as izhi_dynamics
 
 
 class Model:
@@ -26,13 +27,21 @@ class Model:
 		self.init_optimizer()
 		self.init_eligibility()
 
-		self.size_ref = cp_ones([par['batch_size'], 1, par['n_hidden']])
+		self.size_ref = cp.ones([par['batch_size'], 1, par['n_hidden']])
+
+		# Select model dynamics
+		if par['spike_model'] == 'adex':
+			self.dynamics = adex_dynamics
+		elif par['spike_model'] == 'lif':
+			self.dynamics = None	# Needs to be added
+		elif par['spike_model'] == 'izhi':
+			self.dynamics = izhi_dynamics
 
 
 	def init_constants(self):
 		""" Import constants from CPU to GPU """
 
-		constants  = ['dt', 'dt_sec', 'adex', 'lif', 'izhi', 'w_init']
+		constants  = ['dt', 'dt_sec', 'adex', 'lif', 'izhi', 'w_init', 'v_init']
 		constants += ['EI_vector', 'EI_matrix', 'EI_mask_exh', 'EI_mask_inh']
 		constants += ['W_in_mask', 'W_rnn_mask', 'W_out_mask', 'b_out_mask']
 
@@ -80,14 +89,14 @@ class Model:
 		self.eps['inp'] = {}
 		self.eps['rec'] = {}
 		for s in ['v', 'w', 'ia']:
-			self.eps['inp'][s] = cp_zeros([par['batch_size'], par['n_input'], par['n_hidden']])
+			self.eps['inp'][s] = cp.zeros([par['batch_size'], par['n_input'], par['n_hidden']])
 		for s in ['v', 'w', 'ir', 'sx', 'su']:
-			self.eps['rec'][s] = cp_zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
+			self.eps['rec'][s] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
 
 		self.kappa = {}
-		self.kappa['inp'] = cp_zeros([par['batch_size'], par['n_input'], par['n_hidden']])
-		self.kappa['rec'] = cp_zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
-		self.kappa['out'] = cp_zeros([par['batch_size'], par['n_hidden'], 1])
+		self.kappa['inp'] = cp.zeros([par['batch_size'], par['n_input'], par['n_hidden']])
+		self.kappa['rec'] = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
+		self.kappa['out'] = cp.zeros([par['batch_size'], par['n_hidden'], 1])
 
 
 	def zero_state(self):
@@ -101,8 +110,8 @@ class Model:
 			for s in self.eps[v].keys():
 				self.eps[v][s] = cp.zeros_like(self.eps[v][s]) if not 'prev' in s else None
 
-		self.eps['inp']['prev_v'] = [cp_zeros([par['batch_size'], par['n_input'], par['n_hidden']]) for _ in range(par['latency'])]
-		self.eps['rec']['prev_v'] = [cp_zeros([par['batch_size'], par['n_hidden'], par['n_hidden']]) for _ in range(par['latency'])]
+		self.eps['inp']['prev_v'] = [cp.zeros([par['batch_size'], par['n_input'], par['n_hidden']]) for _ in range(par['latency'])]
+		self.eps['rec']['prev_v'] = [cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']]) for _ in range(par['latency'])]
 
 		for k in self.kappa.keys():
 			self.kappa[k] = cp.zeros_like(self.kappa[k])
@@ -151,26 +160,27 @@ class Model:
 		self.zero_state()
 
 		# Establish internal state recording
-		self.v  = cp_zeros([par['num_time_steps'], par['batch_size'], 1, par['n_hidden']])
-		self.w  = cp_zeros([par['num_time_steps'], par['batch_size'], 1, par['n_hidden']])
-		self.sx = cp_zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], 1])
-		self.su = cp_zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], 1])
+		self.v  = cp.zeros([par['num_time_steps'], par['batch_size'], 1, par['n_hidden']])
+		self.w  = cp.zeros([par['num_time_steps'], par['batch_size'], 1, par['n_hidden']])
+		self.sx = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], 1])
+		self.su = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], 1])
+		
 		# Initialize cell states
-		v = self.con_dict['adex']['V_r'] * self.size_ref
+		v = self.con_dict['v_init'] * self.size_ref
 		w = self.con_dict['w_init'] * self.size_ref
+
 		# Initialize synaptic plasticity
 		sx = self.con_dict['syn_x_init'] if par['use_stp'] else 1.
 		su = self.con_dict['syn_u_init'] if par['use_stp'] else 1.
 
 		# Record other parts of the model as well
-		self.z = cp_zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
-		self.h = cp_zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
-		self.y = cp_zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
-
+		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
+		self.h = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
+		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
 
 		# Initialize input trace
-		ia = cp_zeros([par['batch_size'], par['n_input'], par['n_hidden']])
-		ir = cp_zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
+		ia = cp.zeros([par['batch_size'], par['n_input'], par['n_hidden']])
+		ir = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
 
 		self.I_sqr = 0
 
@@ -214,15 +224,12 @@ class Model:
 		x = self.input_data[t,:,:,cp.newaxis]
 
 		# Update the input traces based on presynaptic spikes
-		st['ia'] = self.con_dict['adex']['beta'] * st['ia'] + \
-			(1-self.con_dict['adex']['beta']) * self.eff_var['W_in'] * x
-		st['ir'] = self.con_dict['adex']['beta'] * st['ir'] + \
-			(1-self.con_dict['adex']['beta']) * self.eff_var['W_rnn'] * st['sx'] * st['su'] * z
+		curr_beta = self.con_dict[par['spike_model']]['beta']
+		st['ia'] = curr_beta * st['ia'] + (1-curr_beta) * self.eff_var['W_in'] * x
+		st['ir'] = curr_beta * st['ir'] + (1-curr_beta) * self.eff_var['W_rnn'] * st['sx'] * st['su'] * z
 
-		st['ja'] = self.con_dict['adex']['beta'] * st['ja'] + \
-			(1-self.con_dict['adex']['beta']) * x
-		st['jr'] = self.con_dict['adex']['beta'] * st['jr'] + \
-			(1-self.con_dict['adex']['beta']) * st['sx'] * st['su'] * z
+		st['ja'] = curr_beta * st['ja'] + (1-curr_beta) * x
+		st['jr'] = curr_beta * st['jr'] + (1-curr_beta) * st['sx'] * st['su'] * z
 
 		# Update the synaptic plasticity state (recurrent only; input is static)
 		st['sx'], st['su'] = \
@@ -232,15 +239,21 @@ class Model:
 		I = cp.sum(st['ia'], axis=1, keepdims=True) + cp.sum(st['ir'], axis=1, keepdims=True)
 
 		# Update the AdEx cell state with the input current
-		st['v'], st['w'], self.z[t,...] = run_adex(st['v'], st['w'], I, self.con_dict['adex'])
+		st['v'], st['w'], self.z[t,...] = run_spike_model(st['v'], st['w'], I, par['spike_model'], self.con_dict[par['spike_model']])
 
 		# Update output trace based on postsynaptic cell state (Eq. 12)
-		self.y[t,...] = self.con_dict['adex']['kappa'] * self.y[t-1,...] + self.z[t,...] @ self.eff_var['W_out'] + self.eff_var['b_out']
+		self.y[t,...] = self.con_dict[par['spike_model']]['kappa'] * self.y[t-1,...] + self.z[t,...] @ self.eff_var['W_out'] + self.eff_var['b_out']
 
 		# Calculate h, the pseudo-derivative (Eq. 5, ~24, 20/21)
 		# Bellec et al., 2018b
-		self.h[t,...] = cp.squeeze(par['gamma_psd'] * cp.maximum(0., \
-			1 - cp.abs((st['v']-(par['betagrad']+self.con_dict['adex']['V_T']))/par['pseudo_th'])))
+		if par['spike_model'] == 'adex':
+			self.h[t,...] = cp.squeeze(par['gamma_psd'] * cp.maximum(0., \
+				1 - cp.abs((st['v']-(par['betagrad']+self.con_dict['adex']['V_T']))/par['pseudo_th'])))
+		elif par['spike_model'] == 'izhi':
+			self.h[t,...] = cp.squeeze(par['gamma_psd'] * cp.maximum(0., \
+				1 - cp.abs((st['v']-(par['betagrad']+self.con_dict['izhi']['Vth']))/par['pseudo_th'])))
+		else:
+			raise Exception('Unimplemented pseudo-derivative.')
 
 		#h = par['gamma_psd'] * cp.maximum(0., 1 - cp.abs((st['v'] + 40e-3)/par['pseudo_th']))
 		#h = par['gamma_psd'] * cp.ones_like(h)
@@ -250,7 +263,7 @@ class Model:
 	def update_eligibility(self, state_dict, I, t):
 
 		# Calculate the model dynamics and generate new epsilons
-		self.eps = calculate_dynamics(self.eps, state_dict, self.input_data, self.z, self.h, \
+		self.eps = self.dynamics(self.eps, state_dict, self.input_data, self.z, self.h, \
 			self.sx, self.su, self.con_dict, self.eff_var, self.var_dict, t)
 
 		# Update and modulate e's
@@ -260,13 +273,13 @@ class Model:
 		e_out = self.z[t,...,cp.newaxis]
 
 		# Increment kappa arrays forward in time (Eq. 42-45, k^(t-t') terms)
-		self.kappa['inp'] = self.con_dict['adex']['kappa']*self.kappa['inp'] + e_inp
-		self.kappa['rec'] = self.con_dict['adex']['kappa']*self.kappa['rec'] + e_rec
-		self.kappa['out'] = self.con_dict['adex']['kappa']*self.kappa['out'] + e_out
+		self.kappa['inp'] = self.con_dict[par['spike_model']]['kappa']*self.kappa['inp'] + e_inp
+		self.kappa['rec'] = self.con_dict[par['spike_model']]['kappa']*self.kappa['rec'] + e_rec
+		self.kappa['out'] = self.con_dict[par['spike_model']]['kappa']*self.kappa['out'] + e_out
 
 		# EI balance
 		if par['balance_EI_training']:
-			c = self.con_dict['adex']
+			c = self.con_dict[par['spike_model']]
 			h = np.squeeze(h, axis = 1)
 			const = np.squeeze(c['dt'] * c['mu'] / c['C'], axis = (0,1))
 			beta = 0.00002

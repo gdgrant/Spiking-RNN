@@ -109,7 +109,7 @@ def activity_plots(i, model):
 	ax[2].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
 	ax[2].set_title('Spiking')
 	ax[3].imshow(to_cpu(model.v[:,0,0,:].T), aspect='auto', clim=(V_min,0.))
-	ax[3].set_title('Membrane Voltage ($(V_r = {:5.3f}), {:5.3f} \\leq V_j^t \\leq 0$)'.format(par['adex']['V_r'].min(), V_min))
+	ax[3].set_title('Membrane Voltage ($(V_r = {:5.3f}), {:5.3f} \\leq V_j^t \\leq 0$)'.format(par[par['spike_model']]['V_r'].min(), V_min))
 
 	ax[0].set_ylabel('Input Neuron')
 	ax[1].set_ylabel('Hidden Neuron')

@@ -19,7 +19,7 @@ par = {
 	'batch_size'              : 64,
 	'iterations'              : 20000,
 	'learning_rate'           : 1e-3,
-	'spike_model'             : 'adex',
+	'spike_model'             : 'izhi',
 	'optimizer'               : 'adam',
 
 	# Optimization parameters
@@ -223,7 +223,8 @@ def update_dependencies():
 
 	# Spiking algorithms
 	par['adex'] = {}
-	par['lif'] = {}
+	par['lif']  = {}
+	par['izhi'] = {}
 
 	if par['spike_model'] == 'adex':
 		### Adaptive-Expoential spiking
@@ -250,13 +251,14 @@ def update_dependencies():
 		par['adex']['Vth'] = 0.
 		par['adex']['dt']  = par['dt']/1000
 		par['w_init']      = par['adex']['b']
+		par['v_init']      = par['adex']['V_r']
 
 		par['adex']['beta']  = np.exp(-par['dt']/par['tau_hid']).astype(np.float64)
 		par['adex']['kappa'] = np.exp(-par['dt']/par['tau_out']).astype(np.float64)
 		par['adex']['mu']    = par['current_multiplier']
 
 	elif par['spike_model'] == 'izhi':
-		### Adaptive-Expoential spiking
+		### Izhikevich spiking
 		# Note that voltages are in units of V, A, and secs
 		par['RS'] = {
 			'a'	: 0.02,
@@ -270,7 +272,7 @@ def update_dependencies():
 			'c'	: -65.,
 			'd'	: 2. }
 
-		for (k0, v_exc), (k1, v_inh) in zip(par[par['exc_model']].items(), par[par['inh_model']].items()):
+		for (k0, v_exc), (k1, v_inh) in zip(par['RS'].items(), par['FS'].items()):
 			assert(k0 == k1)
 			par_matrix = np.ones([1,1,par['n_hidden']], dtype=np.float64)
 			par_matrix[:,:,:par['n_EI']] *= v_exc
@@ -280,11 +282,13 @@ def update_dependencies():
 		# par['adex'] = par['RS']
 		par['izhi']['Vth'] = 30.
 		par['izhi']['dt']  = par['dt']/1000
+		par['izhi']['V_r'] = par['izhi']['c']
 		par['w_init']      = par['izhi']['b'] * par['izhi']['c']
+		par['v_init']      = par['izhi']['c']
 
 		par['izhi']['beta']  = np.exp(-par['dt']/par['tau_hid']).astype(np.float64)
 		par['izhi']['kappa'] = np.exp(-par['dt']/par['tau_out']).astype(np.float64)
-
+		par['izhi']['mu']    = 1e3 * par['current_multiplier']
 
 	elif par['spike_model'] == 'lif':
 		### LIF with Adaptive Threshold spiking
@@ -300,14 +304,5 @@ def update_dependencies():
 		par['lif']['kappa'] = np.exp(-par['dt_sec']/par['lif']['tau_o']).astype(np.float64)
 
 
-def check_for_float64():
-	pass
-	"""
-	for key, val in par.items():
-		if type(val) == np.ndarray and val.dtype == np.float64:
-			raise Exception('Parameter \'{}\' is of dtype float64.  Use float64 instead.'.format(val))
-	"""
-
 update_dependencies()
-check_for_float64()
 print('--> Parameters loaded.\n')
