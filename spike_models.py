@@ -55,12 +55,19 @@ def adex_spike(V, w, c):
 ### Izhikevic Model spiking model
 
 def run_izhi(V, w, I, c):
-	""" Run one step of the AdEx algorithm """
+	""" Run one step of the Izhikevic spike model algorithm """
 
-	V_next      = 0.04*V**2 + 5*V + 140 - w + I
-	w_next      = c['a']*(c['b'] * V - w)
+	I_eff = I * c['mu']
+
+	V_next      = V + 0.04*V**2 + 5*V + 140 - w + I_eff
+	w_next      = w + c['a']*(c['b'] * V - w)
 	V, w, spike = izhi_spike(V_next, w_next, c)
 
+	"""
+	V, w, spike = izhi_spike(V, w, c)
+	V      		= V + 0.04*V**2 + 5*V + 140 - w + I_eff
+	w      		= w + c['a']*(c['b'] * V - w)
+	"""
 	return V, w, spike
 
 
