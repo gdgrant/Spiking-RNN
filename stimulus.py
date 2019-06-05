@@ -85,7 +85,7 @@ class Stimulus:
 		test_direction = np.where(match, sample_direction, test_direction)
 		match = np.where(test_direction==sample_direction, True, match)
 		trial_info['match'] = match
-		
+
 		if par['fixation_on']:
 			trial_info['neural_input'][:end_delay_time,:,par['num_motion_tuned']:par['num_motion_tuned']+par['num_fix_tuned']] += self.fix_tuning[np.newaxis,:,0]
 
@@ -113,6 +113,7 @@ class Stimulus:
 
 		# Select match/nonmatch and catch trials
 		sample_direction = np.random.choice(par['num_motion_dirs'], size=par['batch_size'])
+		trial_info['sample'] = sample_direction
 		test_direction   = np.random.choice(par['num_motion_dirs'], size=par['batch_size'])
 		if var_delay:
 			catch_trials = np.random.choice([True,False], size=par['batch_size'], p=[par['catch_prob'], 1-par['catch_prob']])
@@ -288,7 +289,7 @@ class Stimulus:
 
 			# Make output neuron index
 			output_neuron = 1 if trial_info['match'][t] else 2
-				
+
 			# Generate fixation cue and response
 			if par['fixation_on']:
 				trial_info['neural_input'][:end_delay_time[t],t,par['num_motion_tuned']:par['num_motion_tuned']+par['num_fix_tuned']] \
@@ -303,7 +304,7 @@ class Stimulus:
 			trial_info['neural_input'][end_fix_time:end_sample_time,t,:par['num_motion_tuned']] \
 				+= self.motion_tuning[:,0,trial_info['sample_dir'][t]]
 
-			# Make mask time at end of delay			
+			# Make mask time at end of delay
 			trial_info['train_mask'][end_delay_time[t]:,t] = 0.
 
 			# Make test stimulus, but only if not a catch trial
