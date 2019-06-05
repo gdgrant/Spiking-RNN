@@ -47,7 +47,8 @@ if load_single:
 	loadfn = './savedir/dmc_izhi_b25_wd6_fix_weights.pkl'
 	new_par = pickle.load(open(loadfn, 'rb'))['par']
 	update_parameters(new_par, verbose=False)
-	update_parameters({'savefn':new_par['savefn'] + '_loaded', 'loadfn':loadfn, 'load_weights':True})
+	update_parameters({'savefn':new_par['savefn'] + '_loaded', 'loadfn':loadfn, 'load_weights':True,})
+	update_parameters({'balance_EI_training':False, 'batch_size':64})
 	load_custom_weights()
 	print_parameters()
 	main()

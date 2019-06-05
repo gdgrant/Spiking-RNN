@@ -268,14 +268,11 @@ class Model:
 
 	def update_eligibility(self, state_dict, I, t):
 
-		# Calculate the model dynamics and generate new epsilons
-		"""
+		# Calculate the model dynamics and generate new epsilons	
 		self.eps = self.dynamics(self.eps, state_dict, self.input_data, self.z, self.h, \
 			self.sx, self.su, self.con_dict, self.eff_var, self.var_dict, t)
-		"""
 
 		# Update and modulate e's
-
 		e_inp = self.h[t,:,cp.newaxis,:] * self.eps['inp']['v']
 		e_rec = self.h[t,:,cp.newaxis,:] * self.eps['rec']['v']
 		e_out = self.z[t,...,cp.newaxis]
@@ -318,8 +315,8 @@ class Model:
 
 		# Update pending weight changes
 		if par['train_input_weights']:
-			self.grad_dict['W_in'] += 0 * cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['inp'], axis=0)
-		self.grad_dict['W_rnn']    += 0 * cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['rec'], axis=0)
+			self.grad_dict['W_in'] += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['inp'], axis=0)
+		self.grad_dict['W_rnn']    += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['rec'], axis=0)
 
 		self.grad_dict['W_out']    += cp.mean(L_out[:,cp.newaxis,:] * self.kappa['out'], axis=0)
 		self.grad_dict['b_out']    += cp.mean(L_out[:,cp.newaxis,:], axis=0)
