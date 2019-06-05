@@ -14,6 +14,8 @@ par = {
 	'save_data_files'         : False,
 	'save_pdfs'               : False,
 	'plot_EI_testing'         : False,
+	'loadfn'                  : './savedir/_testing_data_iter003500.pkl',
+	'load_weights'            : False,
 
 	# Training environment
 	'batch_size'              : 64,
@@ -99,6 +101,17 @@ par = {
 	'weight_decay'			  : 4e-8,
 
 }
+
+def load_custom_weights():
+
+	if par['load_weights']:
+		data = pickle.load(open(par['loadfn'], 'rb'))
+		var_dict = data['weights']
+
+		print('\nLoading custom variable initializations for {}.'.format(var_dict.keys()))
+		for name, val in var_dict.items():
+			par[name+'_init'] = val
+		print('Custom variables loaded.\n')
 
 
 def make_weights_and_masks():
@@ -313,4 +326,5 @@ def update_dependencies():
 
 
 update_dependencies()
+load_custom_weights()
 print('--> Parameters loaded.\n')

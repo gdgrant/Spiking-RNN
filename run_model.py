@@ -4,7 +4,7 @@ from parameters import par, update_parameters
 
 def print_parameters():
 
-	keys = ['save_dir', 'savefn', 'cell_type', 'optimizer', \
+	keys = ['save_dir', 'savefn', 'load_weights', 'loadfn', 'spike_model', 'optimizer', \
 		'batch_size', 'iterations', 'learning_rate', 'use_stp', \
 		'n_input', 'n_hidden', 'n_output', 'dv_approx', 'betagrad', \
 		'train_input_weights', 'pseudo_th', 'dt', 'tau_hid', 'tau_out', \
