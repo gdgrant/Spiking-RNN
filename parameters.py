@@ -106,12 +106,21 @@ def load_custom_weights():
 
 	if par['load_weights']:
 		data = pickle.load(open(par['loadfn'], 'rb'))
-		var_dict = data['weights']
+		var = data['weights']
 
-		print('\nLoading custom variable initializations for {}.'.format(var_dict.keys()))
-		for name, val in var_dict.items():
-			par[name+'_init'] = val
-		print('Custom variables loaded.\n')
+		if type(var) == np.ndarray:
+			print('\nLoading custom W_rnn initialization.')
+			par['W_rnn_init'] = var
+			print('Custom W_rnn loaded.\n')
+
+		elif type(var) == dict:
+			print('\nLoading custom variable initializations for {}.'.format(var.keys()))
+			for name, val in var.items():
+				par[name+'_init'] = val
+			print('Custom variables loaded.\n')
+
+		else:
+			raise Exception('Clarify variable container.')
 
 
 def make_weights_and_masks():
