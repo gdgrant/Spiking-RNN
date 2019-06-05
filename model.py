@@ -2,6 +2,7 @@
 from imports import *
 from gpu_utils import *
 from model_utils import *
+from itertools import product
 
 # Training environment
 from parameters import par, update_dependencies
@@ -16,6 +17,7 @@ import cupy.linalg as LA
 from spike_models import run_spike_model
 from dynamics_adex import calculate_dynamics as adex_dynamics
 from dynamics_izhi import calculate_dynamics as izhi_dynamics
+
 
 
 class Model:
@@ -164,7 +166,7 @@ class Model:
 		self.w  = cp.zeros([par['num_time_steps'], par['batch_size'], 1, par['n_hidden']])
 		self.sx = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], 1])
 		self.su = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden'], 1])
-		
+
 		# Initialize cell states
 		v = self.con_dict['v_init'] * self.size_ref
 		w = self.con_dict['w_init'] * self.size_ref
@@ -231,6 +233,8 @@ class Model:
 		st['ja'] = curr_beta * st['ja'] + (1-curr_beta) * x
 		st['jr'] = curr_beta * st['jr'] + (1-curr_beta) * st['sx'] * st['su'] * z
 
+		#print( 'I', cp.mean(st['ia']), cp.mean(st['ir']))
+
 		# Update the synaptic plasticity state (recurrent only; input is static)
 		st['sx'], st['su'] = \
 			synaptic_plasticity(st['sx'], st['su'], z, self.con_dict, par['use_stp'])
@@ -247,13 +251,15 @@ class Model:
 		# Calculate h, the pseudo-derivative (Eq. 5, ~24, 20/21)
 		# Bellec et al., 2018b
 		if par['spike_model'] == 'adex':
-			self.h[t,...] = cp.squeeze(par['gamma_psd'] * cp.maximum(0., \
-				1 - cp.abs((st['v']-(par['betagrad']+self.con_dict['adex']['V_T']))/par['pseudo_th'])))
+			T = self.con_dict['adex']['V_T'] + par['betagrad']
 		elif par['spike_model'] == 'izhi':
-			self.h[t,...] = cp.squeeze(par['gamma_psd'] * cp.maximum(0., \
-				1 - cp.abs((st['v']-(par['betagrad']+self.con_dict['izhi']['Vth']))/par['pseudo_th'])))
+			T = self.con_dict['izhi']['c']  + par['betagrad']
 		else:
 			raise Exception('Unimplemented pseudo-derivative.')
+
+		self.h[t,...] = cp.squeeze(par['gamma_psd'] * cp.maximum(0., \
+			1 - cp.abs(st['v'] - T)/par['pseudo_th']))
+
 
 		#h = par['gamma_psd'] * cp.maximum(0., 1 - cp.abs((st['v'] + 40e-3)/par['pseudo_th']))
 		#h = par['gamma_psd'] * cp.ones_like(h)
@@ -263,8 +269,10 @@ class Model:
 	def update_eligibility(self, state_dict, I, t):
 
 		# Calculate the model dynamics and generate new epsilons
+		"""
 		self.eps = self.dynamics(self.eps, state_dict, self.input_data, self.z, self.h, \
 			self.sx, self.su, self.con_dict, self.eff_var, self.var_dict, t)
+		"""
 
 		# Update and modulate e's
 
@@ -280,20 +288,24 @@ class Model:
 		# EI balance
 		if par['balance_EI_training']:
 			c = self.con_dict[par['spike_model']]
-			h = np.squeeze(h, axis = 1)
-			const = np.squeeze(c['dt'] * c['mu'] / c['C'], axis = (0,1))
-			beta = 0.00002
-			gamma = 0.000004
+			h = self.h[t,...]
+			z = self.z[t,...]
+			const = c['mu']
+			beta = par['weight_decay']
+			gamma = beta/4
 
 			self.grad_dict['W_rnn_exc_local'] += cp.mean((const * h * (1 - z))[:,np.newaxis,:] * state_dict['jr'], axis=0)
-			self.grad_dict['W_rnn_exc_local'][:par['n_EI'],:] -= beta* cp.mean(self.eff_var['W_rnn'][:par['n_EI'],:], axis=0, keepdims=True)
-			self.grad_dict['W_rnn_exc_local'][:par['n_EI'],:] -= gamma*self.eff_var['W_rnn'][:par['n_EI'],:]
+			self.grad_dict['W_rnn_exc_local'][:par['n_exc'],:] -= gamma*self.eff_var['W_rnn'][:par['n_exc'],:]
 
 			self.grad_dict['W_in_local'] += cp.mean((const * h * (1 - z))[:,np.newaxis,:] * state_dict['ja'], axis=0)
-			self.grad_dict['W_in_local'] -= beta* cp.mean(self.eff_var['W_in'], axis=0, keepdims=True)
 			self.grad_dict['W_in_local'] -= gamma* self.eff_var['W_in']
 
-			self.grad_dict['W_rnn_inh_local'] =  cp.mean(I * state_dict['jr'], axis = 0)
+			total_input = cp.sum(self.eff_var['W_rnn'][:par['n_exc'],:], axis=0, keepdims=True) + cp.sum(self.eff_var['W_in'], axis=0, keepdims=True)
+			total_input /= (par['n_exc'] + par['n_input'])
+			self.grad_dict['W_rnn_exc_local'][:par['n_exc'],:] -= beta*total_input
+			self.grad_dict['W_in_local'] -= beta*total_input
+
+			self.grad_dict['W_rnn_inh_local'] += cp.mean(I * state_dict['jr'], axis = 0)
 
 
 	def calculate_weight_updates(self, t):
@@ -306,28 +318,27 @@ class Model:
 
 		# Update pending weight changes
 		if par['train_input_weights']:
-			self.grad_dict['W_in'] += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['inp'], axis=0)
-		self.grad_dict['W_rnn']    += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['rec'], axis=0)
-		if par['balance_EI_training']:
-			self.grad_dict['W_rnn']					+= self.con_dict['EI_mask_exh'] @ cp.mean(self.EI_balance_delta_exh, axis=0)
-			self.grad_dict['W_rnn'][:par['n_EI'],:] -= self.EI_exh_limit
-			self.grad_dict['W_rnn']					+= self.con_dict['EI_mask_inh'] @ cp.mean(self.EI_balance_delta_inh, axis=0)
+			self.grad_dict['W_in'] += 0 * cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['inp'], axis=0)
+		self.grad_dict['W_rnn']    += 0 * cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['rec'], axis=0)
+
 		self.grad_dict['W_out']    += cp.mean(L_out[:,cp.newaxis,:] * self.kappa['out'], axis=0)
 		self.grad_dict['b_out']    += cp.mean(L_out[:,cp.newaxis,:], axis=0)
+
+		if par['balance_EI_training']:
+
+			self.grad_dict['W_rnn'] += par['local_rate']*self.con_dict['EI_mask_exh'] @ self.grad_dict['W_rnn_exc_local']
+			self.grad_dict['W_rnn'] += 2*par['local_rate']*self.con_dict['EI_mask_inh'] @ self.grad_dict['W_rnn_inh_local']
+			self.grad_dict['W_in'] += par['local_rate']*self.grad_dict['W_in_local']
+
+			self.grad_dict['W_rnn_exc_local'] *= 0.
+			self.grad_dict['W_rnn_inh_local'] *= 0.
+			self.grad_dict['W_in_local'] *= 0.
 
 
 	def optimize(self):
 		""" Optimize the model -- apply any collected updates """
 
-		if par['balance_EI_training']:
 
-			self.grad_dict['W_rnn'] += 1e1*self.con_dict['EI_mask_exh'] @ self.grad_dict['W_rnn_exc_local']
-			self.grad_dict['W_rnn'] += 1e1*self.con_dict['EI_mask_inh'] @ self.grad_dict['W_rnn_inh_local']
-			self.grad_dict['W_in'] += 5e1*self.grad_dict['W_in_local']
-
-			self.grad_dict['W_rnn_exc_local'] *= 0.
-			self.grad_dict['W_rnn_inh_local'] *= 0.
-			self.grad_dict['W_in_local'] *= 0.
 
 		self.grad_dict['W_in'] *= self.con_dict['W_in_mask']
 		self.grad_dict['W_rnn'] *= self.con_dict['W_rnn_mask']
@@ -410,38 +421,50 @@ def main():
 		task_acc_record.append(task_accuracy)
 		iter_record.append(i)
 		I_sqr_record.append(model.I_sqr)
-		W_rnn_grad_sum_record.append(cp.sum(model.grad_dict['W_rnn']))
+		W_rnn_grad_sum_record.append(cp.sum(model.var_dict['W_rnn']))
 		W_rnn_grad_norm_record.append(LA.norm(model.grad_dict['W_rnn']))
+
+		W_exc_mean = cp.mean(cp.maximum(0, model.var_dict['W_rnn'][:par['n_exc'], :]))
+		W_inh_mean = cp.mean(cp.maximum(0, model.var_dict['W_rnn'][par['n_exc']:, :]))
 
 		info_str0 = 'Iter {:>5} | Task Loss: {:5.3f} | Task Acc: {:5.3f} | '.format(i, losses['task'], task_accuracy)
 		info_str1 = 'Full Acc: {:5.3f} | Mean Spiking: {:6.3f} Hz'.format(full_accuracy, mean_spiking)
 		print('Aggregating data...', end='\r')
 
+		print('Mean EXC w_rnn ', W_exc_mean, 'mean INH w_rnn', W_inh_mean)
+
 		if par['plot_EI_testing']:
-				# Plot I square
-				plt.figure()
-				plt.plot(I_sqr_record)
-				plt.savefig('./savedir/{}_I_sqr_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
-				plt.clf()
-				plt.close()
+			# Plot I square
+			plt.figure()
+			plt.plot(I_sqr_record)
+			plt.savefig('./savedir/{}_I_sqr_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
+			plt.clf()
+			plt.close()
 
-				# Plot W_rnn sum update
-				plt.figure()
-				plt.plot(W_rnn_grad_sum_record)
-				plt.savefig('./savedir/{}_W_rnn_grad_sum_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
-				plt.clf()
-				plt.close()
+			# Plot W_rnn sum update
+			plt.figure()
+			plt.plot(W_rnn_grad_sum_record)
+			plt.savefig('./savedir/{}_W_rnn_grad_sum_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
+			plt.clf()
+			plt.close()
 
-				# Plot W_rnn norm update
-				plt.figure()
-				plt.plot(W_rnn_grad_norm_record)
-				plt.savefig('./savedir/{}_W_rnn_grad_norm_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
-				plt.clf()
-				plt.close()
+			# Plot W_rnn norm update
+			plt.figure()
+			plt.plot(W_rnn_grad_norm_record)
+			plt.savefig('./savedir/{}_W_rnn_grad_norm_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
+			plt.clf()
+			plt.close()
 
-		if i%50==0:
+		if i%20==0:
+			run_pev_analysis(trial_info['sample'], to_cpu(model.su*model.sx), \
+				to_cpu(model.z), to_cpu(cp.stack(I_sqr_record)), i)
+			weights = to_cpu(model.var_dict['W_rnn'])
+			fn = './savedir/{}_weights.pkl'.format(par['savefn'])
+			data = {'weights':weights, 'par': par}
+			pickle.dump(data, open(fn, 'wb'))
+
 			pf.activity_plots(i, model)
-
+			"""
 			if i != 0:
 				pf.training_curve(i, iter_record, full_acc_record, task_acc_record)
 
@@ -455,6 +478,7 @@ def main():
 			trial_info = stim.make_batch(var_delay=False)
 			model.run_model(trial_info, testing=True)
 			model.show_output_behavior(i, trial_info)
+			"""
 
 		# Print output info (after all saving of data is complete)
 		print(info_str0 + info_str1)
@@ -463,6 +487,70 @@ def main():
 			if np.mean(task_acc_record[-100:]) > 0.9:
 				print('\nMean accuracy greater than 0.9 over last 100 iters.\nMoving on to next model.\n')
 				break
+
+
+def pev_analysis(a, b):
+
+	weights = np.linalg.lstsq(a, b, rcond=None)
+	error   = b - a @ weights[0]
+
+	error = error.reshape(b.shape)
+	mse   = np.mean(error**2)
+	rvar  = np.var(b)
+	pev   = 1 - mse/(rvar+1e-9) if rvar > 1e-9 else 0
+
+	return pev, weights[0]
+
+
+def run_pev_analysis(sample, syn_eff, z, I_sqr_record, i):
+
+	### Run PEV analysis on the voltage and synaptic efficacy
+	### to determine where the match/nonmatch information is stored
+
+	syn_eff = np.squeeze(syn_eff)
+
+	filtered_z = np.zeros_like(z)
+	alpha = 0.98
+	for t in range(1, z.shape[0]):
+		filtered_z[t, :, :] = alpha*filtered_z[t-1, :, :] + (1-alpha)*z[t,:,:]
+
+	sample_dir = np.ones((par['batch_size'], 3))
+	sample_dir[:,1] = np.cos(2*np.pi*sample/par['num_motion_dirs'])
+	sample_dir[:,2] = np.sin(2*np.pi*sample/par['num_motion_dirs'])
+
+	pev_z = np.zeros([par['num_time_steps'], par['n_hidden']])
+	pev_syn = np.zeros([par['num_time_steps'], par['n_hidden']])
+
+	for n, t in product(range(par['n_hidden']), range(par['num_time_steps'])):
+
+		pev_z[t,n], _ = pev_analysis(sample_dir, filtered_z[t,:,n,np.newaxis])
+		pev_syn[t,n], _ = pev_analysis(sample_dir, syn_eff[t,:,n,np.newaxis])
+
+
+	fig, ax = plt.subplots(2,2, figsize=(10,8))
+	ax[0,0].imshow(pev_z.T, aspect='auto', clim=(0,1))
+	ax[0,1].imshow(pev_syn.T, aspect='auto', clim=(0,1))
+	ax[1,0].plot(np.percentile(pev_z, 95, axis=1),'g', label = 'spikes 95pct')
+	ax[1,0].plot(np.percentile(pev_syn, 95, axis=1),'m', label = 'synapses 95pct')
+	ax[1,0].plot(np.percentile(pev_z, 80, axis=1),'g--', label = 'spikes 80pct')
+	ax[1,0].plot(np.percentile(pev_syn, 80, axis=1),'m--', label = 'synapses 80pct')
+	ax[1,0].legend()
+	ax[1,1].plot(I_sqr_record)
+
+	ax[0,0].set_title('Spike PEV')
+	ax[0,1].set_title('Synaptic PEV')
+
+	ax[1,0].set_xlabel('Time (ms)')
+	ax[1,1].set_xlabel('Iterations')
+	ax[1,0].set_ylabel('PEV')
+	ax[0,0].set_ylabel('Neurons')
+
+
+	plt.savefig('./savedir/{}_pev{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
+	if par['save_pdfs']:
+		plt.savefig('./savedir/{}_activity_iter{:0>6}.pdf'.format(par['savefn'], i), bbox_inches='tight')
+	plt.clf()
+	plt.close()
 
 
 if __name__ == '__main__':
