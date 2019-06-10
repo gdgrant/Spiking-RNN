@@ -1,5 +1,4 @@
 from imports import *
-from gpu_utils import *
 from parameters import par
 
 def calculate_dynamics(prev_eps, st, input_data, spikes, pseudo_der, syn_x, syn_u, con_dict, eff_var, var_dict, t):

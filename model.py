@@ -1,7 +1,6 @@
 # General imports and utility functions
 from imports import *
-from gpu_utils import *
-from model_utils import *
+from utils import *
 from itertools import product
 
 # Training environment

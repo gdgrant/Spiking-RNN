@@ -1,5 +1,5 @@
 from imports import *
-from gpu_utils import to_cpu
+from utils import to_cpu
 from sklearn.svm import SVC
 from itertools import product
 

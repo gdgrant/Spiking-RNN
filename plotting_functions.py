@@ -1,5 +1,5 @@
 from imports import *
-from gpu_utils import to_gpu, to_cpu
+from utils import to_gpu, to_cpu
 from parameters import par
 
 def output_behavior(it, trial_info, y):
