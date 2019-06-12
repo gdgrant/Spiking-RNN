@@ -33,8 +33,6 @@ class Model:
 		# Select model dynamics
 		if par['spike_model'] == 'adex':
 			self.dynamics = adex_dynamics
-		elif par['spike_model'] == 'lif':
-			self.dynamics = None	# Needs to be added
 		elif par['spike_model'] == 'izhi':
 			self.dynamics = izhi_dynamics
 
@@ -267,7 +265,7 @@ class Model:
 
 	def update_eligibility(self, state_dict, I, t):
 
-		# Calculate the model dynamics and generate new epsilons	
+		# Calculate the model dynamics and generate new epsilons
 		self.eps = self.dynamics(self.eps, state_dict, self.input_data, self.z, self.h, \
 			self.sx, self.su, self.con_dict, self.eff_var, self.var_dict, t)
 
