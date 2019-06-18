@@ -43,12 +43,8 @@ def calculate_dynamics(prev_eps, st, input_data, spikes, psuedo_der, syn_x, syn_
 	one_minus_beta = 1 - c['beta']
 
 	d_eff_weights_raw_weights = ((var_dict['W_rnn'] >= 0) * con_dict['EI_vector'][:,cp.newaxis])[cp.newaxis,...]
-	d_eff_weights_raw_weights = con_dict['EI_vector'][cp.newaxis,:,cp.newaxis]
-	#import matplotlib.pyplot as plt
-	#plt.imshow(to_cpu((var_dict['W_rnn'] >= 0) *con_dict['EI_vector'][:,cp.newaxis]), aspect='auto')
-	#plt.colorbar()
-	#plt.show()
-
+	d_inp_weights_raw_weights = (var_dict['W_in'] >= 0)[cp.newaxis,:,:]
+	
 	one_minus_z           = 1. - z
 	one_minus_z_dt_over_C = one_minus_z * dt_over_C
 	one_minus_z_dt_mu_over_C = one_minus_z_dt_over_C * c['mu']
@@ -80,7 +76,7 @@ def calculate_dynamics(prev_eps, st, input_data, spikes, psuedo_der, syn_x, syn_
 
 	eps['inp']['ia'] = \
 		  prev_eps['inp']['ia'] * c['beta'] \
-		+ one_minus_beta * x
+		+ one_minus_beta * x * d_inp_weights_raw_weights
 
 	### Update recurrent epsilons
 	eps['rec']['v'] = \
