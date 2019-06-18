@@ -103,7 +103,6 @@ def calculate_dynamics(prev_eps, st, input_data, spikes, psuedo_der, syn_x, syn_
 		  prev_eps['rec']['su'] * (1 - con_dict['alpha_stf'] - con_dict['U']*z_prev)
 
 	### Second-order terms
-	"""
 	# dI/dz * dZ/dV
 	term_I = one_minus_beta * h_prev * syn_x * syn_u * eff_var['W_rnn'][cp.newaxis,:,:]
 	# dSx/dz * dZ/dV
@@ -111,27 +110,14 @@ def calculate_dynamics(prev_eps, st, input_data, spikes, psuedo_der, syn_x, syn_
 	# dSu/dz * dZ/dV
 	term_Su = con_dict['U'] * (1 - syn_u) * h_prev
 
-	eps['rec']['v'] += cp.einsum('bij,bjk->bik', prev_eps['rec']['prev_v'][0], term_I + term_Sx + term_Su)
-	eps['inp']['v'] += cp.einsum('bij,bjk->bik', prev_eps['inp']['prev_v'][0], term_I + term_Sx + term_Su)
-	"""
+	#eps['rec']['v'] += cp.einsum('bij,bjk->bik', prev_eps['rec']['prev_v'][0], term_I + term_Sx + term_Su)
+	#eps['inp']['v'] += cp.einsum('bij,bjk->bik', prev_eps['inp']['prev_v'][0], term_I + term_Sx + term_Su)
+	eps['rec']['ir'] += cp.einsum('bij,bjk->bik', prev_eps['rec']['prev_v'][0], term_I)
+	eps['inp']['ia'] += cp.einsum('bij,bjk->bik', prev_eps['inp']['prev_v'][0], term_I)
 
-	#eps['inp']['v'] += \
-	#	prev_eps['inp']['prev_v'][0] * (term_I + term_Sx + term_Su)
+	eps['rec']['sx'] += cp.einsum('bij,bjk->bik', prev_eps['rec']['prev_v'][0], term_Sx)
+	eps['rec']['su'] += cp.einsum('bij,bjk->bik', prev_eps['rec']['prev_v'][0], term_Su)
 
-	"""
-	eps['rec']['v'] += \
-		prev_eps['rec']['prev_v'][0] * h_prev \
-		* ((-1 + one_minus_beta * eff_var['W_rnn'][cp.newaxis,:,:]) * syn_x * syn_u - con_dict['U'] * (1 - syn_u))
-	"""
 
-	### Second-order corrections to recurrent epsilons
-	"""
-	term1_z = one_minus_beta * h_prev * one_minus_z_dt_mu_over_C * syn_x_prev * syn_u_prev * z_prev_prev * d_eff_weights_raw_weights
-	term1_x = one_minus_beta * h_prev * one_minus_z_dt_mu_over_C * x_prev
-	term2 = one_minus_beta * syn_u  * syn_x * eff_var['W_rnn'][cp.newaxis,:,:]
-
-	eps['rec']['ir'] += cp.einsum('bij,bjk->bik', term1_z, term2)
-	eps['inp']['ia'] += cp.einsum('bij,bjk->bik', term1_x, term2)
-	"""
 
 	return eps
