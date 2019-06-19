@@ -14,14 +14,14 @@ par = {
 	'save_data_files'         : False,
 	'save_pdfs'               : False,
 	'plot_EI_testing'         : False,
-	'loadfn'                  : './savedir/_testing_data_iter003500.pkl',
+	'loadfn'                  : './none',
 	'load_weights'            : False,
 
 	# Training environment
 	'batch_size'              : 64,
 	'iterations'              : 20000,
 	'learning_rate'           : 1e-3,
-	'spike_model'             : 'izhi',
+	'spike_model'             : 'adex',
 	'optimizer'               : 'adam',
 
 	# Optimization parameters
@@ -44,6 +44,9 @@ par = {
 	'num_rule_tuned'          : 20,
 	'num_receptive_fields'    : 1,
 	'n_hidden'                : 500,
+	'num_clusters'            : 4,
+	'cluster_inh'             : False,
+	'cluster_conn_prob'       : 0.2,
 	'n_output'                : 3,
 
 	# Timing constants (all in ms)
@@ -70,9 +73,9 @@ par = {
 	'betagrad'				  : 0,
 
 	# Noise and weight scaling
-	'input_gamma'             : 0.3,
-	'rnn_gamma'               : 0.15,
-	'output_gamma'            : 0.04,
+	'input_gamma'             : 0.08,
+	'rnn_gamma'               : 0.07,
+	'output_gamma'            : 0.06,
 	'rnn_cap'                 : 0.006,
 	'noise_in_sd'             : 8.,
 
@@ -94,8 +97,8 @@ par = {
 	'fix_time'                : 100,
 	'sample_time'             : 150,
 	'delay_time'              : 120,
-	'test_time'               : 100,
-	'mask_time'               : 80,
+	'test_time'               : 200,
+	'mask_time'               : 50,
 
 	'local_rate'			  : 5000.,
 	'weight_decay'			  : 4e-8,
@@ -121,6 +124,47 @@ def load_custom_weights():
 
 		else:
 			raise Exception('Clarify variable container.')
+
+
+def ocker_doiron_recurrent_weights():
+
+	omega = 0.4
+	p0 = 0.15
+
+	W_EE_sym = np.zeros([par['n_exc'], par['n_exc']])
+	for i in range(par['n_exc']):
+		for j in range(i,par['n_exc']):
+			if i != j:
+				p = omega*p0
+				c = np.random.choice([0,1], p=[1-p, p])
+				W_EE_sym[i,j] = c
+				W_EE_sym[j,i] = c
+
+	W_EE_asym = np.zeros([par['n_exc'], par['n_exc']])
+	for i, j in itertools.product(range(par['n_exc']), range(par['n_exc'])):
+		if i != j:
+			p = (1-omega)*p0
+			c = np.random.choice([0,1], p=[1-p, p])
+			W_EE_asym[i,j] = c
+
+
+	W_EE = W_EE_sym * W_EE_asym
+
+	fig, ax = plt.subplots(2,2)
+	ax[0,0].imshow(W_EE_sym, aspect='auto')
+	ax[0,0].set_title('W_EE_sym')
+	ax[0,1].imshow(W_EE_asym, aspect='auto')
+	ax[0,1].set_title('W_EE_asym')
+	ax[1,0].imshow(W_EE, aspect='auto')
+	ax[1,0].set_title('W_EE')
+	ax[1,1].imshow(W_EE * W_EE.T, aspect='auto')
+	ax[1,1].set_title('W_EE * W_EE.T')
+
+	print(np.sum(W_EE * W_EE.T))
+	plt.show()
+	quit()
+	
+	
 
 
 def make_weights_and_masks():
@@ -149,10 +193,37 @@ def make_weights_and_masks():
 			par['W_rnn_init'][par['n_exc']:,:] *= 1.8
 			par['W_rnn_init'][:,par['n_exc']:] *= 1.8
 
+	### Clustering
+	par['cluster_id'] = np.zeros(par['n_hidden']) - 1
+	if par['cluster_inh']:
+		par['cluster_id'] = np.random.randint(par['num_clusters'], size=par['n_hidden'])
+	else:
+		m = par['n_exc']//par['num_clusters']
+		for c in range(par['num_clusters']):
+			par['cluster_id'][c*m:(c+1)*m] = c
+
+	# i = pre, j = post
+	# W_rnn[i,j]
+	for i, j in itertools.product(range(par['n_hidden']), range(par['n_hidden'])):
+		if par['cluster_id'][i] == -1 or par['cluster_id'][j] == -1:
+			pass
+		elif par['cluster_id'][i] == par['cluster_id'][j]:
+			pass
+		else:
+			par['W_rnn_init'][i,j] = par['W_rnn_init'][i,j] if np.random.rand() < par['cluster_conn_prob'] else -1e-3
+
 	par['W_rnn_mask']   = 1 - np.eye(par['n_hidden']).astype(np.float64)
 	par['W_rnn_init']  *= par['W_rnn_mask']
 
 	par['W_rnn_init'] = np.minimum(4., par['W_rnn_init']).astype(np.float64)
+	# par['W_rnn_init'] = np.where(np.random.rand(*par['W_rnn_init'].shape) > 0.5, par['W_rnn_init'], -1e-3)
+	par['W_in_init']  = np.where(np.random.rand(*par['W_in_init'].shape)  > 0.5, par['W_in_init'],  -1e-3)
+
+
+	# plt.imshow(np.sqrt(np.maximum(0., par['W_rnn_init'] * par['W_rnn_init'].T)), aspect='auto')
+	# plt.colorbar()
+	# plt.show()
+	# quit()
 
 
 	# Remake W_in and mask if weight won't be trained

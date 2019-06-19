@@ -9,32 +9,34 @@ def print_parameters():
 		'n_input', 'n_hidden', 'n_output', 'dv_approx', 'betagrad', \
 		'train_input_weights', 'pseudo_th', 'dt', 'tau_hid', 'tau_out', \
 		'latency', 'task', 'response_multiplier', 'dead_time', 'delay_time', \
-		'var_delay', 'balance_EI_training']
+		'var_delay', 'balance_EI_training', 'num_clusters', 'cluster_inh', 'cluster_conn_prob']
 
 	print('-'*60)
 	for k in keys:
 		print(k.ljust(30), par[k])
 	print('-'*60)
 
-sweep       = False
-load_single = True
+sweep       = True
+load_single = False
 
 if sweep:
 	delay = 500
 	dv_approx = True
-	pseudoth = 10
+	pseudoth = 20e-3
+	betagrad = 10e-3
 	n = 5
 	r = int(sys.argv[1])
 	for j in range(n*r, n*(r+1)):
 
 		savefn = 'taskswitch_fixedinp_no2nd_{}pseudoth_{}neuron_var{}delay_v{:0>2}'.format(pseudoth, par['n_hidden'], delay, j)
+		savefn = 'fewer_clustered_secondorder_betagrad{:0>3}'.format(int(betagrad*1000))
 
 		updates = {
 			'savefn'			: savefn,
-			'task'				: 'dmswitch',
+			'task'				: 'dmc',
 			'dv_approx'			: True,
-			'betagrad'			: 0.,
-			'psudo_th'			: pseudoth*1e-3,
+			'betagrad'			: betagrad,
+			'pseudo_th'			: pseudoth,
 			'delay_time'		: delay,
 			'iterations'		: 10000,
 			'save_data_files'	: True }

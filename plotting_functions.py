@@ -2,6 +2,72 @@ from imports import *
 from utils import to_gpu, to_cpu
 from parameters import par
 
+def plot_grads_and_epsilons(it, trial_info, model, h, eps_v_rec, eps_w_rec, eps_ir_rec):
+
+	h = to_cpu(h[:,0,:])
+	eps_v_rec = to_cpu(eps_v_rec)
+	eps_w_rec = to_cpu(eps_w_rec)
+	eps_ir_rec = to_cpu(eps_ir_rec)
+
+	V_min = to_cpu(model.v[:,0,:,:].T.min())
+
+	fig, ax = plt.subplots(8, 1, figsize=[16,22], sharex=True)
+
+	ax[0].imshow(trial_info['neural_input'][:,0,:].T, aspect='auto')
+	ax[0].set_title('Input Data')
+	ax[0].set_ylabel('Input Neuron')
+
+	ax[1].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
+	ax[1].set_title('Spiking')
+	ax[1].set_ylabel('Hidden Neuron')
+
+	ax[2].plot(to_cpu(model.z[:,0,0]), label='Spike')
+	ax[2].plot(to_cpu(model.v[:,0,0,0]) * -10, label='- Voltage x 10')
+	ax[2].plot(h[:,0], label='Gradient')
+	ax[2].legend()
+	ax[2].set_title('Single Neuron')
+
+	ax[3].imshow(h.T, aspect='auto', clim=(0, par['gamma_psd']))
+	ax[3].set_title('Pseudogradient (${} \\leq h \\leq {}$) | Sum: $h = {:6.3f}$'.format(0., par['gamma_psd'], np.sum(h)))
+	ax[3].set_ylabel('Hidden Neuron')
+
+	ax[4].imshow(to_cpu(model.v[:,0,0,:].T), aspect='auto')
+	ax[4].set_title('Membrane Voltage ($(V_r = {:5.3f}), {:5.3f} \\leq V_j^t \\leq 0$)'.format(par[par['spike_model']]['V_r'].min(), V_min))
+	ax[4].set_ylabel('Hidden Neuron')
+
+	ax[5].imshow(eps_v_rec.T, aspect='auto')
+	ax[5].set_title('Voltage Eligibility (${:6.3f} \\leq e_{{v,rec}} \\leq {:6.3f}$)'.format(eps_v_rec.min(), eps_v_rec.max()))
+	ax[5].set_ylabel('Hidden Neuron')
+
+	ax[6].imshow(eps_w_rec.T, aspect='auto')
+	ax[6].set_title('Adaptation Eligibility (${:6.3f} \\leq e_{{w,rec}} \\leq {:6.3f}$)'.format(eps_w_rec.min(), eps_w_rec.max()))
+	ax[6].set_ylabel('Hidden Neuron')
+
+	ax[7].imshow(eps_ir_rec.T, aspect='auto')
+	ax[7].set_title('Current Eligibility (${:6.3f} \\leq e_{{ir,rec}} \\leq {:6.3f}$)'.format(eps_ir_rec.min(), eps_ir_rec.max()))
+	ax[7].set_ylabel('Hidden Neuron')
+
+	# ax[0,1].imshow(trial_info['neural_input'][:,0,:].T, aspect='auto')
+	# ax[1,1].imshow(to_cpu(model.z[:,0,:].T), aspect='auto')
+	# ax[2,1].imshow(h.T, aspect='auto', clim=(0, par['gamma_psd']))
+	# ax[3,1].imshow(to_cpu(model.v[:,0,0,:].T), aspect='auto')
+
+	# ax[4,1].imshow(eps_v_rec.T, aspect='auto')
+	# ax[4,1].set_xlabel('Time')
+
+	# for i in range(4):
+	# 	ax[i,0].set_xticks([])
+
+	# for i in range(5):
+	# 	ax[i,1].set_xlim(200,350)
+
+	plt.savefig('./savedir/{}_epsilon_iter{:0>6}.png'.format(par['savefn'], it), bbox_inches='tight')
+	if par['save_pdfs']:
+		plt.savefig('./savedir/{}_epsilon_iter{:0>6}.pdf'.format(par['savefn'], it), bbox_inches='tight')
+	plt.clf()
+	plt.close()
+
+
 def output_behavior(it, trial_info, y):
 
 

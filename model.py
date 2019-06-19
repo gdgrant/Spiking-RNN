@@ -123,7 +123,7 @@ class Model:
 		self.eff_var = {}
 
 		# Send input and output weights to effective variables
-		self.eff_var['W_in']  = self.var_dict['W_in']
+		self.eff_var['W_in']  = relu(self.var_dict['W_in'])
 		self.eff_var['W_out'] = self.var_dict['W_out']
 		self.eff_var['b_out'] = self.var_dict['b_out']
 
@@ -176,6 +176,10 @@ class Model:
 		self.z = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.h = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_hidden']])
 		self.y = cp.zeros([par['num_time_steps'], par['batch_size'], par['n_output']])
+
+		self.eps_v_rec = cp.zeros([par['num_time_steps'], par['n_hidden']])
+		self.eps_w_rec = cp.zeros([par['num_time_steps'], par['n_hidden']])
+		self.eps_ir_rec = cp.zeros([par['num_time_steps'], par['n_hidden']])
 
 		# Initialize input trace
 		ia = cp.zeros([par['batch_size'], par['n_input'], par['n_hidden']])
@@ -273,6 +277,10 @@ class Model:
 		e_inp = self.h[t,:,cp.newaxis,:] * self.eps['inp']['v']
 		e_rec = self.h[t,:,cp.newaxis,:] * self.eps['rec']['v']
 		e_out = self.z[t,...,cp.newaxis]
+
+		self.eps_v_rec[t,:] = cp.mean(self.eps['rec']['v'][0,:,:], axis=0)
+		self.eps_w_rec[t,:] = cp.mean(self.eps['rec']['w'][0,:,:], axis=0)
+		self.eps_ir_rec[t,:] = cp.mean(self.eps['rec']['ir'][0,:,:], axis=0)
 
 		# Increment kappa arrays forward in time (Eq. 42-45, k^(t-t') terms)
 		self.kappa['inp'] = self.con_dict[par['spike_model']]['kappa']*self.kappa['inp'] + e_inp
@@ -380,6 +388,7 @@ class Model:
 	def show_output_behavior(self, it, trial_info):
 
 		pf.output_behavior(it, trial_info, softmax(self.y))
+		pf.plot_grads_and_epsilons(it, trial_info, self, self.h, self.eps_v_rec, self.eps_w_rec, self.eps_ir_rec)
 
 
 def main():
@@ -425,7 +434,7 @@ def main():
 		info_str1 = 'Full Acc: {:5.3f} | Mean Spiking: {:6.3f} Hz'.format(full_accuracy, mean_spiking)
 		print('Aggregating data...', end='\r')
 
-		print('Mean EXC w_rnn ', W_exc_mean, 'mean INH w_rnn', W_inh_mean)
+		# print('Mean EXC w_rnn ', W_exc_mean, 'mean INH w_rnn', W_inh_mean)
 
 		if par['plot_EI_testing']:
 			# Plot I square
@@ -471,8 +480,8 @@ def main():
 
 			trial_info = stim.make_batch(var_delay=False)
 			model.run_model(trial_info, testing=True)
-			model.show_output_behavior(i, trial_info)
 			"""
+			model.show_output_behavior(i, trial_info)
 
 		# Print output info (after all saving of data is complete)
 		print(info_str0 + info_str1)
