@@ -305,7 +305,7 @@ class Model:
 		e_inp = self.h[t,:,cp.newaxis,:] * self.eps['inp']['v']
 		e_rec = self.h[t,:,cp.newaxis,:] * self.eps['rec']['v']
 		e_out = self.z[t,...,cp.newaxis]
-
+		
 		self.eps_v_rec[t,:] = cp.mean(self.eps['rec']['v'][0,:,:], axis=0)
 		self.eps_w_rec[t,:] = cp.mean(self.eps['rec']['w'][0,:,:], axis=0)
 		self.eps_ir_rec[t,:] = cp.mean(self.eps['rec']['ir'][0,:,:], axis=0)
@@ -347,7 +347,7 @@ class Model:
 		L_out = output_error
 
 		# Update pending weight changes
-		if par['train_input_weights']:
+		if True or par['train_input_weights']:
 			self.grad_dict['W_in'] += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['inp'], axis=0)
 		self.grad_dict['W_rnn']    += cp.mean(L_hid[:,cp.newaxis,:] * self.kappa['rec'], axis=0)
 
@@ -428,7 +428,6 @@ class Model:
 	def show_output_behavior(self, it, trial_info):
 
 		pf.output_behavior(it, trial_info, softmax(self.y))
-		pf.plot_grads_and_epsilons(it, trial_info, self, self.h, self.eps_v_rec, self.eps_w_rec, self.eps_ir_rec)
 
 
 def main():
@@ -491,6 +490,7 @@ def main():
 			pf.activity_plots(i, model)
 			pf.clopath_update_plot(i, model.clopath_W_in, model.clopath_W_rnn, \
 				model.grad_dict['W_in'], model.grad_dict['W_rnn'])
+			pf.plot_grads_and_epsilons(it, trial_info, model, model.h, model.eps_v_rec, model.eps_w_rec, model.eps_ir_rec)
 
 			if i != 0:
 				pf.training_curve(i, iter_record, full_acc_record, task_acc_record)
