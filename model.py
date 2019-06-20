@@ -490,7 +490,7 @@ def main():
 			pf.activity_plots(i, model)
 			pf.clopath_update_plot(i, model.clopath_W_in, model.clopath_W_rnn, \
 				model.grad_dict['W_in'], model.grad_dict['W_rnn'])
-			pf.plot_grads_and_epsilons(it, trial_info, model, model.h, model.eps_v_rec, model.eps_w_rec, model.eps_ir_rec)
+			pf.plot_grads_and_epsilons(i, trial_info, model, model.h, model.eps_v_rec, model.eps_w_rec, model.eps_ir_rec)
 
 			if i != 0:
 				pf.training_curve(i, iter_record, full_acc_record, task_acc_record)
