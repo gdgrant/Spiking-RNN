@@ -322,6 +322,28 @@ def update_dependencies():
 			par['syn_x_init'][:,i+1,:] = 1
 			par['syn_u_init'][:,i+1,:] = par['U'][:,i+1,:]
 
+	### Clopath plasticity
+	par['clopath'] = {}
+	par['clopath']['theta-'] = -70.6e-3
+	par['clopath']['theta+'] = -45.3e-3
+	par['clopath']['A_LTD']  =  14e-5 * 1e3
+	par['clopath']['A_LTP']  =  8e-5 * 1e6
+
+	par['clopath']['dt']     = par['dt']*1e-3
+	par['clopath']['tau_x']  = 15e-3
+	par['clopath']['tau_-']  = 10e-3
+	par['clopath']['tau_+']  = 5e-3
+
+	par['clopath']['alpha_-'] = par['clopath']['dt']/par['clopath']['tau_-']
+	par['clopath']['alpha_+'] = par['clopath']['dt']/par['clopath']['tau_+']
+	par['clopath']['alpha_x'] = par['clopath']['dt']/par['clopath']['tau_x']
+
+	par['EE_mask'] = np.zeros([par['n_hidden'], par['n_hidden']])
+	par['EE_mask'][:par['n_exc'],:par['n_exc']] = 1.
+
+	par['XE_mask'] = np.zeros([par['n_input'], par['n_hidden']])
+	par['XE_mask'][:,:par['n_exc']] = 1.
+
 	# Spiking algorithms
 	par['adex'] = {}
 	par['lif']  = {}

@@ -1,7 +1,6 @@
 # General imports and utility functions
 from imports import *
 from utils import *
-from itertools import product
 
 # Training environment
 from parameters import par, update_dependencies
@@ -43,6 +42,7 @@ class Model:
 		constants  = ['dt', 'dt_sec', 'adex', 'lif', 'izhi', 'w_init', 'v_init']
 		constants += ['EI_vector', 'EI_matrix', 'EI_mask_exh', 'EI_mask_inh']
 		constants += ['W_in_mask', 'W_rnn_mask', 'W_out_mask', 'b_out_mask']
+		constants += ['clopath', 'EE_mask', 'XE_mask']
 
 		if par['use_stp']:
 			constants += ['alpha_stf', 'alpha_std', 'U', 'syn_x_init', 'syn_u_init']
@@ -123,13 +123,14 @@ class Model:
 		self.eff_var = {}
 
 		# Send input and output weights to effective variables
-		self.eff_var['W_in']  = relu(self.var_dict['W_in'])
+		self.eff_var['W_in']  = cp.clip(self.var_dict['W_in'], 0., 10.)
 		self.eff_var['W_out'] = self.var_dict['W_out']
 		self.eff_var['b_out'] = self.var_dict['b_out']
 
 		# Send recurrent weights, with appropriate changes, to effective variables
 		if par['EI_prop'] != 1.:
-			self.eff_var['W_rnn'] = apply_EI(self.var_dict['W_rnn'], self.con_dict['EI_matrix'])
+			eff = cp.clip(self.var_dict['W_rnn'], 0., 4.)
+			self.eff_var['W_rnn'] = apply_EI(eff, self.con_dict['EI_matrix'])
 		else:
 			self.eff_var['W_rnn'] = self.var_dict['W_rnn']
 
@@ -185,6 +186,14 @@ class Model:
 		ia = cp.zeros([par['batch_size'], par['n_input'], par['n_hidden']])
 		ir = cp.zeros([par['batch_size'], par['n_hidden'], par['n_hidden']])
 
+		# Initialize Clopath traces
+		self.x_trace  = cp.zeros([par['batch_size'], par['n_input'], 1])
+		self.z_trace  = cp.zeros([par['batch_size'], par['n_hidden'], 1])
+		self.Vp_trace = cp.zeros([par['batch_size'], 1, par['n_hidden']])
+		self.Vm_trace = cp.zeros([par['batch_size'], 1, par['n_hidden']])
+		self.clopath_W_in  = cp.zeros([par['n_input'], par['n_hidden']])
+		self.clopath_W_rnn = cp.zeros([par['n_hidden'], par['n_hidden']])
+
 		self.I_sqr = 0
 
 		# Make state dictionary
@@ -196,6 +205,25 @@ class Model:
 			# Run cell step
 			state_dict, I = self.recurrent_cell(state_dict, t)
 
+			# Update Clopath traces
+			z_L   = self.z[t-par['latency'],:,:,cp.newaxis]
+			x     = self.input_data[t,:,:,cp.newaxis]
+			post  = self.z[t,:,cp.newaxis,:]
+			cl    = self.con_dict['clopath']
+			V_eff = state_dict['v'] * (1-post) + self.con_dict[par['spike_model']]['Vth'] * post
+
+			self.Vp_trace += self.con_dict['clopath']['alpha_+'] * (-self.Vp_trace + V_eff)
+			self.Vm_trace += self.con_dict['clopath']['alpha_-'] * (-self.Vm_trace + V_eff)
+			self.z_trace  += self.con_dict['clopath']['alpha_x'] * (-self.z_trace + z_L)
+			self.x_trace  += self.con_dict['clopath']['alpha_x'] * (-self.x_trace + x)
+
+			th_min = relu(self.Vm_trace - cl['theta-'])
+			th_plu = relu(V_eff-cl['theta+']) * relu(self.Vp_trace-cl['theta-'])
+
+			self.clopath_W_rnn += cp.mean(cl['dt'] * (-cl['A_LTD']*z_L*th_min + cl['A_LTP']*self.z_trace*th_plu), axis=0)
+			self.clopath_W_in  += cp.mean(cl['dt'] * (-cl['A_LTD']*x  *th_min + cl['A_LTP']*self.x_trace*th_plu), axis=0)
+
+			# Identify I squared
 			self.I_sqr += (1/par['num_time_steps']) * cp.mean(cp.square(cp.sum(I, axis=1)))
 
 			# Record cell state
@@ -341,6 +369,18 @@ class Model:
 		""" Optimize the model -- apply any collected updates """
 
 
+		cl = self.clopath_W_rnn * self.con_dict['EE_mask']
+		g_scale = cp.mean(cp.abs(self.grad_dict['W_rnn']))
+		c_scale = cp.mean(cp.abs(cl))
+		self.clopath_W_rnn = cl * (g_scale/c_scale)
+		self.grad_dict['W_rnn'] += self.clopath_W_rnn
+
+		cl = self.clopath_W_in * self.con_dict['XE_mask']
+		g_scale = cp.mean(cp.abs(self.grad_dict['W_in']))
+		c_scale = cp.mean(cp.abs(cl))
+		self.clopath_W_in = cl * (g_scale/c_scale)
+		self.grad_dict['W_in'] += self.clopath_W_in
+
 
 		self.grad_dict['W_in'] *= self.con_dict['W_in_mask']
 		self.grad_dict['W_rnn'] *= self.con_dict['W_rnn_mask']
@@ -434,32 +474,14 @@ def main():
 		info_str1 = 'Full Acc: {:5.3f} | Mean Spiking: {:6.3f} Hz'.format(full_accuracy, mean_spiking)
 		print('Aggregating data...', end='\r')
 
-		# print('Mean EXC w_rnn ', W_exc_mean, 'mean INH w_rnn', W_inh_mean)
-
-		if par['plot_EI_testing']:
-			# Plot I square
-			plt.figure()
-			plt.plot(I_sqr_record)
-			plt.savefig('./savedir/{}_I_sqr_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
-			plt.clf()
-			plt.close()
-
-			# Plot W_rnn sum update
-			plt.figure()
-			plt.plot(W_rnn_grad_sum_record)
-			plt.savefig('./savedir/{}_W_rnn_grad_sum_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
-			plt.clf()
-			plt.close()
-
-			# Plot W_rnn norm update
-			plt.figure()
-			plt.plot(W_rnn_grad_norm_record)
-			plt.savefig('./savedir/{}_W_rnn_grad_norm_iter{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
-			plt.clf()
-			plt.close()
 
 		if i%20==0:
-			run_pev_analysis(trial_info['sample'], to_cpu(model.su*model.sx), \
+
+			# print('Mean EXC w_rnn ', W_exc_mean, 'mean INH w_rnn', W_inh_mean)
+			if par['plot_EI_testing']:
+				pf.EI_testing_plots(i, I_sqr_record, W_rnn_grad_sum_record, W_rnn_grad_norm_record)
+
+			pf.run_pev_analysis(trial_info['sample'], to_cpu(model.su*model.sx), \
 				to_cpu(model.z), to_cpu(cp.stack(I_sqr_record)), i)
 			weights = to_cpu(model.var_dict['W_rnn'])
 			fn = './savedir/{}_weights.pkl'.format(par['savefn'])
@@ -467,7 +489,9 @@ def main():
 			pickle.dump(data, open(fn, 'wb'))
 
 			pf.activity_plots(i, model)
-			"""
+			pf.clopath_update_plot(i, model.clopath_W_in, model.clopath_W_rnn, \
+				model.grad_dict['W_in'], model.grad_dict['W_rnn'])
+
 			if i != 0:
 				pf.training_curve(i, iter_record, full_acc_record, task_acc_record)
 
@@ -480,7 +504,6 @@ def main():
 
 			trial_info = stim.make_batch(var_delay=False)
 			model.run_model(trial_info, testing=True)
-			"""
 			model.show_output_behavior(i, trial_info)
 
 		# Print output info (after all saving of data is complete)
@@ -490,70 +513,6 @@ def main():
 			if np.mean(task_acc_record[-100:]) > 0.9:
 				print('\nMean accuracy greater than 0.9 over last 100 iters.\nMoving on to next model.\n')
 				break
-
-
-def pev_analysis(a, b):
-
-	weights = np.linalg.lstsq(a, b, rcond=None)
-	error   = b - a @ weights[0]
-
-	error = error.reshape(b.shape)
-	mse   = np.mean(error**2)
-	rvar  = np.var(b)
-	pev   = 1 - mse/(rvar+1e-9) if rvar > 1e-9 else 0
-
-	return pev, weights[0]
-
-
-def run_pev_analysis(sample, syn_eff, z, I_sqr_record, i):
-
-	### Run PEV analysis on the voltage and synaptic efficacy
-	### to determine where the match/nonmatch information is stored
-
-	syn_eff = np.squeeze(syn_eff)
-
-	filtered_z = np.zeros_like(z)
-	alpha = 0.98
-	for t in range(1, z.shape[0]):
-		filtered_z[t, :, :] = alpha*filtered_z[t-1, :, :] + (1-alpha)*z[t,:,:]
-
-	sample_dir = np.ones((par['batch_size'], 3))
-	sample_dir[:,1] = np.cos(2*np.pi*sample/par['num_motion_dirs'])
-	sample_dir[:,2] = np.sin(2*np.pi*sample/par['num_motion_dirs'])
-
-	pev_z = np.zeros([par['num_time_steps'], par['n_hidden']])
-	pev_syn = np.zeros([par['num_time_steps'], par['n_hidden']])
-
-	for n, t in product(range(par['n_hidden']), range(par['num_time_steps'])):
-
-		pev_z[t,n], _ = pev_analysis(sample_dir, filtered_z[t,:,n,np.newaxis])
-		pev_syn[t,n], _ = pev_analysis(sample_dir, syn_eff[t,:,n,np.newaxis])
-
-
-	fig, ax = plt.subplots(2,2, figsize=(10,8))
-	ax[0,0].imshow(pev_z.T, aspect='auto', clim=(0,1))
-	ax[0,1].imshow(pev_syn.T, aspect='auto', clim=(0,1))
-	ax[1,0].plot(np.percentile(pev_z, 95, axis=1),'g', label = 'spikes 95pct')
-	ax[1,0].plot(np.percentile(pev_syn, 95, axis=1),'m', label = 'synapses 95pct')
-	ax[1,0].plot(np.percentile(pev_z, 80, axis=1),'g--', label = 'spikes 80pct')
-	ax[1,0].plot(np.percentile(pev_syn, 80, axis=1),'m--', label = 'synapses 80pct')
-	ax[1,0].legend()
-	ax[1,1].plot(I_sqr_record)
-
-	ax[0,0].set_title('Spike PEV')
-	ax[0,1].set_title('Synaptic PEV')
-
-	ax[1,0].set_xlabel('Time (ms)')
-	ax[1,1].set_xlabel('Iterations')
-	ax[1,0].set_ylabel('PEV')
-	ax[0,0].set_ylabel('Neurons')
-
-
-	plt.savefig('./savedir/{}_pev{:0>6}.png'.format(par['savefn'], i), bbox_inches='tight')
-	if par['save_pdfs']:
-		plt.savefig('./savedir/{}_activity_iter{:0>6}.pdf'.format(par['savefn'], i), bbox_inches='tight')
-	plt.clf()
-	plt.close()
 
 
 if __name__ == '__main__':
