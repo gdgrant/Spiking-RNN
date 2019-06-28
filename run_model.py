@@ -24,13 +24,19 @@ if sweep:
 	dv_approx = True
 	pseudoth = 20e-3
 	betagrad = 10e-3
+
+	num_clusters = 10
+	predef_inp   = 0
+
+	n_hidden = 250
+
 	n = 5
 	r = int(sys.argv[1])
 	for j in range(n*r, n*(r+1)):
 
 		# savefn = 'taskswitch_fixedinp_no2nd_{}pseudoth_{}neuron_var{}delay_v{:0>2}'.format(pseudoth, par['n_hidden'], delay, j)
 		# savefn = 'fewer_clustered_secondorder_betagrad{:0>3}'.format(int(betagrad*1000))
-		savefn = 'scaled_clopath_testing_v1'
+		savefn = 'clopath_adLTDinv100_{}hidden_{}clusters_{}fixedinp'.format(n_hidden, num_clusters, predef_inp)
 
 		updates = {
 			'savefn'				: savefn,
@@ -39,8 +45,11 @@ if sweep:
 			'betagrad'				: betagrad,
 			'pseudo_th'				: pseudoth,
 			'delay_time'			: delay,
+			'n_hidden'				: n_hidden,
+			'num_clusters'			: num_clusters,
+			'train_input_weights'	: not bool(predef_inp),
 			'iterations'			: 10000,
-			'balance_EI_training'	: False, 
+			'balance_EI_training'	: False,
 			'save_data_files'		: True }
 
 		update_parameters(updates)

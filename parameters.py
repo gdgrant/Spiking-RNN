@@ -44,7 +44,7 @@ par = {
 	'num_rule_tuned'          : 20,
 	'num_receptive_fields'    : 1,
 	'n_hidden'                : 500,
-	'num_clusters'            : 4,
+	'num_clusters'            : 10,
 	'cluster_inh'             : False,
 	'cluster_conn_prob'       : 0.2,
 	'n_output'                : 3,
@@ -225,13 +225,16 @@ def make_weights_and_masks():
 	# plt.show()
 	# quit()
 
+	# print(np.mean(par['W_in_init']))
+	# print(par['W_in_init'].max())
+
 
 	# Remake W_in and mask if weight won't be trained
 	if not par['train_input_weights']:
 
 		par['W_in_const'] = np.zeros_like(par['W_in_init'], dtype=np.float64)
 		U = np.linspace(0, 360, par['n_input']).astype(np.float64)
-		beta = 4.
+		beta = 1.
 		kappa = 7.
 		z = beta/np.exp(kappa)
 		for i in range(0, par['n_hidden'], 4):
@@ -243,6 +246,9 @@ def make_weights_and_masks():
 
 		par['W_in_init'] = par['W_in_const']
 		par['W_in_mask'] = np.ones_like(par['W_in_mask'])
+
+	# print(np.mean(par['W_in_init']))
+	# print(par['W_in_init'].max())
 
 	#plt.imshow(par['W_in_init'],aspect='auto')
 	#plt.colorbar()
@@ -321,7 +327,7 @@ def update_dependencies():
 			par['U'][:,i+1,:] = 0.45
 			par['syn_x_init'][:,i+1,:] = 1
 			par['syn_u_init'][:,i+1,:] = par['U'][:,i+1,:]
-
+			
 	### Clopath plasticity
 	par['clopath'] = {}
 	par['clopath']['theta-'] = -70.6e-3
@@ -339,10 +345,10 @@ def update_dependencies():
 	par['clopath']['alpha_x'] = par['clopath']['dt']/par['clopath']['tau_x']
 
 	par['EE_mask'] = np.zeros([par['n_hidden'], par['n_hidden']])
-	par['EE_mask'][:par['n_exc'],:par['n_exc']] = 1.
+	par['EE_mask'][:par['n_exc'],:] = 1.
+	par['EE_mask'][par['n_exc']:,:] = -1.
 
-	par['XE_mask'] = np.zeros([par['n_input'], par['n_hidden']])
-	par['XE_mask'][:,:par['n_exc']] = 1.
+	par['XE_mask'] = np.ones([par['n_input'], par['n_hidden']])
 
 	# Spiking algorithms
 	par['adex'] = {}

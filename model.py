@@ -26,6 +26,7 @@ class Model:
 		self.init_variables()
 		self.init_optimizer()
 		self.init_eligibility()
+		self.v_trace_mean  = cp.zeros([1, 1, par['n_hidden']])
 
 		self.size_ref = cp.ones([par['batch_size'], 1, par['n_hidden']])
 
@@ -194,6 +195,8 @@ class Model:
 		self.clopath_W_in  = cp.zeros([par['n_input'], par['n_hidden']])
 		self.clopath_W_rnn = cp.zeros([par['n_hidden'], par['n_hidden']])
 
+		self.new_v_trace_mean  = cp.zeros([1, 1, par['n_hidden']])
+
 		self.I_sqr = 0
 
 		# Make state dictionary
@@ -217,11 +220,15 @@ class Model:
 			self.z_trace  += self.con_dict['clopath']['alpha_x'] * (-self.z_trace + z_L)
 			self.x_trace  += self.con_dict['clopath']['alpha_x'] * (-self.x_trace + x)
 
+			self.new_v_trace_mean += cp.mean(0.5*(self.Vp_trace + self.Vm_trace)/par['num_time_steps'], axis=0, keepdims=True)
+
 			th_min = relu(self.Vm_trace - cl['theta-'])
 			th_plu = relu(V_eff-cl['theta+']) * relu(self.Vp_trace-cl['theta-'])
 
-			self.clopath_W_rnn += cp.mean(cl['dt'] * (-cl['A_LTD']*z_L*th_min + cl['A_LTP']*self.z_trace*th_plu), axis=0)
-			self.clopath_W_in  += cp.mean(cl['dt'] * (-cl['A_LTD']*x  *th_min + cl['A_LTP']*self.x_trace*th_plu), axis=0)
+			LTD = cl['A_LTD'] * (1 + 100.*((self.v_trace_mean-self.con_dict[par['spike_model']]['V_r'])/self.con_dict[par['spike_model']]['V_r'])**2)
+
+			self.clopath_W_rnn += cp.mean(cl['dt'] * (-LTD*z_L*th_min + cl['A_LTP']*self.z_trace*th_plu), axis=0)
+			self.clopath_W_in  += cp.mean(cl['dt'] * (-LTD*x  *th_min + cl['A_LTP']*self.x_trace*th_plu), axis=0)
 
 			# Identify I squared
 			self.I_sqr += (1/par['num_time_steps']) * cp.mean(cp.square(cp.sum(I, axis=1)))
@@ -245,6 +252,8 @@ class Model:
 
 				# Update pending weight changes
 				self.calculate_weight_updates(t)
+
+		self.v_trace_mean = self.new_v_trace_mean
 
 
 	def recurrent_cell(self, st, t):
