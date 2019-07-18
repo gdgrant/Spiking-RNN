@@ -44,7 +44,7 @@ def calculate_dynamics(prev_eps, st, input_data, spikes, psuedo_der, syn_x, syn_
 
 	d_eff_weights_raw_weights = ((var_dict['W_rnn'] >= 0) * con_dict['EI_vector'][:,cp.newaxis])[cp.newaxis,...]
 	d_inp_weights_raw_weights = (var_dict['W_in'] >= 0)[cp.newaxis,:,:]
-	
+
 	one_minus_z           = 1. - z
 	one_minus_z_dt_over_C = one_minus_z * dt_over_C
 	one_minus_z_dt_mu_over_C = one_minus_z_dt_over_C * c['mu']
@@ -58,11 +58,11 @@ def calculate_dynamics(prev_eps, st, input_data, spikes, psuedo_der, syn_x, syn_
 
 	adex_voltage_dvdv = one_minus_z*(1 + dt_g_over_C*eps_dyn_v)
 
-
 	# Set up new epsilon recording
-	eps = {}
-	eps['inp'] = {'prev_v': prev_eps['inp']['prev_v']}
-	eps['rec'] = {'prev_v': prev_eps['rec']['prev_v']}
+	eps = {'inp': {}, 'rec': {}}
+	#eps['inp'] = {'prev_v': prev_eps['inp']['prev_v']}
+	#eps['rec'] = {'prev_v': prev_eps['rec']['prev_v']}
+
 
 	### Update input epsilons
 	eps['inp']['v'] = \
@@ -102,21 +102,24 @@ def calculate_dynamics(prev_eps, st, input_data, spikes, psuedo_der, syn_x, syn_
 	eps['rec']['su'] = \
 		  prev_eps['rec']['su'] * (1 - con_dict['alpha_stf'] - con_dict['U']*z_prev)
 
+
 	### Second-order terms
 	# dI/dz * dZ/dV
-	term_I = one_minus_beta * h_prev * syn_x * syn_u * eff_var['W_rnn'][cp.newaxis,:,:]
+	#term_I = one_minus_beta * h_prev * syn_x * syn_u * eff_var['W_rnn'][cp.newaxis,:,:]
 	# dSx/dz * dZ/dV
-	term_Sx = -syn_x * syn_u * h_prev
+	#term_Sx = -syn_x * syn_u * h_prev
 	# dSu/dz * dZ/dV
-	term_Su = con_dict['U'] * (1 - syn_u) * h_prev
+	#term_Su = con_dict['U'] * (1 - syn_u) * h_prev
 
 	#eps['rec']['v'] += cp.einsum('bij,bjk->bik', prev_eps['rec']['prev_v'][0], term_I + term_Sx + term_Su)
 	#eps['inp']['v'] += cp.einsum('bij,bjk->bik', prev_eps['inp']['prev_v'][0], term_I + term_Sx + term_Su)
-	eps['rec']['ir'] += cp.einsum('bij,bjk->bik', prev_eps['rec']['prev_v'][0], term_I)
-	eps['inp']['ia'] += cp.einsum('bij,bjk->bik', prev_eps['inp']['prev_v'][0], term_I)
+	#eps['rec']['ir'] += cp.einsum('bij,bjk->bik', prev_eps['rec']['prev_v'][0], term_I)
+	#eps['inp']['ia'] += cp.einsum('bij,bjk->bik', prev_eps['inp']['prev_v'][0], term_I)
 
-	eps['rec']['sx'] += cp.einsum('bij,bjk->bik', prev_eps['rec']['prev_v'][0], term_Sx)
-	eps['rec']['su'] += cp.einsum('bij,bjk->bik', prev_eps['rec']['prev_v'][0], term_Su)
+	#eps['rec']['sx'] += cp.einsum('bij,bjk->bik', prev_eps['rec']['prev_v'][0], term_Sx)
+	#eps['rec']['su'] += cp.einsum('bij,bjk->bik', prev_eps['rec']['prev_v'][0], term_Su)
+
+
 
 
 

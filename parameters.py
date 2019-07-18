@@ -18,7 +18,7 @@ par = {
 	'load_weights'            : False,
 
 	# Training environment
-	'batch_size'              : 64,
+	'batch_size'              : 128,
 	'iterations'              : 20000,
 	'learning_rate'           : 1e-3,
 	'spike_model'             : 'adex',
@@ -36,7 +36,7 @@ par = {
 	'full_derivative'         : True,
 	'EI_prop'                 : 0.8,
 	'balance_EI'              : True,
-	'balance_EI_training'     : True,
+	'balance_EI_training'     : False,
 
 	# Network shape
 	'num_motion_tuned'        : 100,
@@ -44,14 +44,15 @@ par = {
 	'num_rule_tuned'          : 20,
 	'num_receptive_fields'    : 1,
 	'n_hidden'                : 500,
-	'num_clusters'            : 4,
+	'num_clusters'            : 1,
 	'cluster_inh'             : False,
-	'cluster_conn_prob'       : 0.2,
+	'cluster_conn_prob'       : 0.4,
 	'n_output'                : 3,
+	'defined_input_weights'	  : False,
 
 	# Timing constants (all in ms)
 	'dt'                      : 1,
-	'tau_hid'                 : 5,
+	'tau_hid'                 : 20,
 	'tau_out'                 : 20,
 	'latency'                 : 10,
 
@@ -73,19 +74,19 @@ par = {
 	'betagrad'				  : 0,
 
 	# Noise and weight scaling
-	'input_gamma'             : 0.08,
-	'rnn_gamma'               : 0.07,
-	'output_gamma'            : 0.06,
+	'input_gamma'             : 0.1, # 0.05 for n=1500
+	'rnn_gamma'               : 0.1, # 0.02 for n=1500
+	'output_gamma'            : 0.1,
 	'rnn_cap'                 : 0.006,
 	'noise_in_sd'             : 8.,
 
 	# Task setup
 	'task'                    : 'dmc',
-	'num_motion_dirs'         : 4,
+	'num_motion_dirs'         : 8,
 	'kappa'                   : 2.,
-	'tuning_height'           : 40.,# was 20
-	'response_multiplier'     : 2.,
-	'num_rules'               : 2,
+	'tuning_height'           : 25.,# was 20
+	'response_multiplier'     : 3.,
+	'num_rules'               : 1,
 	'fixation_on'             : True,
 
 	# Task variable parameters
@@ -101,7 +102,7 @@ par = {
 	'mask_time'               : 50,
 
 	'local_rate'			  : 5000.,
-	'weight_decay'			  : 4e-8,
+	'weight_decay'			  : 12e-8,
 
 }
 
@@ -163,8 +164,8 @@ def ocker_doiron_recurrent_weights():
 	print(np.sum(W_EE * W_EE.T))
 	plt.show()
 	quit()
-	
-	
+
+
 
 
 def make_weights_and_masks():
@@ -190,8 +191,10 @@ def make_weights_and_masks():
 	else:
 		par['W_rnn_init'] = np.random.gamma(par['rnn_gamma'], scale=1.0, size=[par['n_hidden'], par['n_hidden']]).astype(np.float64)
 		if par['balance_EI']:
-			par['W_rnn_init'][par['n_exc']:,:] *= 1.8
-			par['W_rnn_init'][:,par['n_exc']:] *= 1.8
+			par['W_rnn_init'][par['n_exc']:,:] *= 2
+			par['W_rnn_init'][:,par['n_exc']:] *= 2
+
+	#par['W_rnn_init'] += 0.25 * np.transpose(par['W_rnn_init'])
 
 	### Clustering
 	par['cluster_id'] = np.zeros(par['n_hidden']) - 1
@@ -215,11 +218,12 @@ def make_weights_and_masks():
 	par['W_rnn_mask']   = 1 - np.eye(par['n_hidden']).astype(np.float64)
 	par['W_rnn_init']  *= par['W_rnn_mask']
 
-	par['W_rnn_init'] = np.minimum(4., par['W_rnn_init']).astype(np.float64)
+	par['W_rnn_init'] = np.minimum(41., par['W_rnn_init']).astype(np.float64)
 	# par['W_rnn_init'] = np.where(np.random.rand(*par['W_rnn_init'].shape) > 0.5, par['W_rnn_init'], -1e-3)
 	par['W_in_init']  = np.where(np.random.rand(*par['W_in_init'].shape)  > 0.5, par['W_in_init'],  -1e-3)
 
-
+	#par['W_rnn_init'][:, par['n_exc']:] = 0.
+	#par['W_rnn_init'][:, par['n_exc']:] = 0.
 	# plt.imshow(np.sqrt(np.maximum(0., par['W_rnn_init'] * par['W_rnn_init'].T)), aspect='auto')
 	# plt.colorbar()
 	# plt.show()
@@ -227,19 +231,19 @@ def make_weights_and_masks():
 
 
 	# Remake W_in and mask if weight won't be trained
-	if not par['train_input_weights']:
+	if par['defined_input_weights']:
 
 		par['W_in_const'] = np.zeros_like(par['W_in_init'], dtype=np.float64)
 		U = np.linspace(0, 360, par['n_input']).astype(np.float64)
-		beta = 4.
-		kappa = 7.
+		beta = 0.5
+		kappa = 3.
 		z = beta/np.exp(kappa)
 		for i in range(0, par['n_hidden'], 4):
 			if i < par['n_exc']:
 				y = z * np.exp(kappa*np.cos(2*np.pi*(i/par['n_exc'] + U/360)))
 			else:
 				y = z * np.exp(kappa*np.cos(2*np.pi*(i/(par['n_hidden']-par['n_exc']) + U/360)))
-			par['W_in_const'][:,i:i+1] = y[:,np.newaxis]
+			par['W_in_const'][:,i] = y
 
 		par['W_in_init'] = par['W_in_const']
 		par['W_in_mask'] = np.ones_like(par['W_in_mask'])
